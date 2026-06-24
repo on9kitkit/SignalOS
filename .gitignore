@@ -1,0 +1,6 @@
+.env
+.venv/
+__pycache__/
+daily_digest.md
+.DS_Store
+digests/
