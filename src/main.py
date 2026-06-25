@@ -4,7 +4,7 @@ from pathlib import Path
 from src.digest import create_markdown_digest
 from src.news_fetcher import fetch_articles
 from src.ranker import apply_source_diversity, rank_articles
-from delivery import send_to_discord
+from src.delivery import send_to_discord
 
 
 def main() -> None:
