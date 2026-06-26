@@ -4,3 +4,4 @@ __pycache__/
 daily_digest.md
 .DS_Store
 digests/
+.signalos_state/

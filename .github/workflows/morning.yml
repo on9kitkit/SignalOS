@@ -29,6 +29,14 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      - name: Restore seen article history
+        uses: actions/cache@v4
+        with:
+          path: .signalos_state
+          key: signalos-seen-articles-${{ github.run_id }}
+          restore-keys: |
+            signalos-seen-articles-
+
       - name: Run SignalOS
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
