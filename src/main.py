@@ -1,6 +1,7 @@
 import hashlib
 import json
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
+from email.utils import parsedate_to_datetime
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -15,15 +16,55 @@ from src.ranker import apply_source_diversity, rank_articles
 STATE_DIR = Path(".signalos_state")
 SEEN_ARTICLES_PATH = STATE_DIR / "seen_articles.json"
 MAX_SEEN_ARTICLES = 300
+FRESH_ARTICLE_WINDOW_DAYS = 3
 
 
 def _normalise_text(value: str) -> str:
     return " ".join(value.lower().strip().split())
 
 
+
 def _article_fingerprint(article: Article) -> str:
     fingerprint_source = f"{_normalise_text(article.title)}|{article.url.strip()}"
     return hashlib.sha256(fingerprint_source.encode("utf-8")).hexdigest()
+
+
+# --- Fresh article helpers ---
+def _parse_article_datetime(article: Article) -> datetime | None:
+    published = article.published.strip()
+
+    if not published or published.lower() == "unknown":
+        return None
+
+    try:
+        parsed_datetime = parsedate_to_datetime(published)
+    except (TypeError, ValueError):
+        return None
+
+    if parsed_datetime.tzinfo is None:
+        return parsed_datetime.replace(tzinfo=timezone.utc)
+
+    return parsed_datetime.astimezone(timezone.utc)
+
+
+def _filter_fresh_articles(
+    articles: list[Article],
+    window_days: int = FRESH_ARTICLE_WINDOW_DAYS,
+) -> list[Article]:
+    cutoff = datetime.now(timezone.utc) - timedelta(days=window_days)
+    fresh_articles: list[Article] = []
+
+    for article in articles:
+        published_at = _parse_article_datetime(article)
+
+        if published_at is None:
+            fresh_articles.append(article)
+            continue
+
+        if published_at >= cutoff:
+            fresh_articles.append(article)
+
+    return fresh_articles
 
 
 def _load_seen_article_ids() -> list[str]:
@@ -87,12 +128,18 @@ def main() -> None:
         raise RuntimeError("No articles were fetched.")
 
     seen_article_ids = _load_seen_article_ids()
-    unseen_articles = _filter_seen_articles(articles, seen_article_ids)
+    fresh_articles = _filter_fresh_articles(articles)
+    fresh_unseen_articles = _filter_seen_articles(fresh_articles, seen_article_ids)
 
-    if len(unseen_articles) < 3:
-        unseen_articles = articles
+    if len(fresh_unseen_articles) >= 3:
+        candidate_articles = fresh_unseen_articles
+    else:
+        candidate_articles = _filter_seen_articles(articles, seen_article_ids)
 
-    ranked_articles = rank_articles(unseen_articles, top_n=10)
+    if len(candidate_articles) < 3:
+        candidate_articles = fresh_articles if len(fresh_articles) >= 3 else articles
+
+    ranked_articles = rank_articles(candidate_articles, top_n=10)
 
     top_articles = apply_source_diversity(
         ranked_articles,
