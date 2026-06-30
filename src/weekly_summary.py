@@ -26,13 +26,11 @@ def _normalise_text(value: str) -> str:
     return " ".join(value.lower().strip().split())
 
 
-
 def _article_fingerprint(article: Article) -> str:
     fingerprint_source = f"{_normalise_text(article.title)}|{article.url.strip()}"
     return hashlib.sha256(fingerprint_source.encode("utf-8")).hexdigest()
 
 
-# --- Fresh article helpers ---
 def _parse_article_datetime(article: Article) -> datetime | None:
     published = article.published.strip()
 
@@ -70,9 +68,9 @@ def _filter_fresh_articles(
     return fresh_articles
 
 
-def _load_seen_article_ids() -> list[str]:
+def _load_seen_article_ids() -> set[str]:
     if not SEEN_ARTICLES_PATH.exists():
-        return []
+        return set()
 
     with SEEN_ARTICLES_PATH.open("r", encoding="utf-8") as file:
         data = json.load(file)
@@ -80,13 +78,13 @@ def _load_seen_article_ids() -> list[str]:
     if not isinstance(data, list):
         raise RuntimeError("seen_articles.json must contain a JSON list.")
 
-    return [str(item) for item in data]
+    return {str(item) for item in data}
 
 
-def _save_seen_article_ids(seen_article_ids: list[str]) -> None:
+def _save_seen_article_ids(seen_article_ids: set[str]) -> None:
     STATE_DIR.mkdir(exist_ok=True)
 
-    compact_history = seen_article_ids[-MAX_SEEN_ARTICLES:]
+    compact_history = sorted(seen_article_ids)[-MAX_SEEN_ARTICLES:]
 
     with SEEN_ARTICLES_PATH.open("w", encoding="utf-8") as file:
         json.dump(compact_history, file, indent=2)
@@ -116,30 +114,23 @@ def _save_article_history(article_history: list[dict[str, Any]]) -> None:
 
 def _filter_seen_articles(
     articles: list[Article],
-    seen_article_ids: list[str],
+    seen_article_ids: set[str],
 ) -> list[Article]:
-    seen_lookup = set(seen_article_ids)
-
     return [
         article
         for article in articles
-        if _article_fingerprint(article) not in seen_lookup
+        if _article_fingerprint(article) not in seen_article_ids
     ]
 
 
 def _mark_ranked_articles_as_seen(
     ranked_articles: list[RankedArticle],
-    seen_article_ids: list[str],
-) -> list[str]:
-    updated_seen_article_ids = list(seen_article_ids)
-    seen_lookup = set(seen_article_ids)
+    seen_article_ids: set[str],
+) -> set[str]:
+    updated_seen_article_ids = set(seen_article_ids)
 
     for ranked_article in ranked_articles:
-        fingerprint = _article_fingerprint(ranked_article.article)
-
-        if fingerprint not in seen_lookup:
-            updated_seen_article_ids.append(fingerprint)
-            seen_lookup.add(fingerprint)
+        updated_seen_article_ids.add(_article_fingerprint(ranked_article.article))
 
     return updated_seen_article_ids
 
@@ -187,6 +178,27 @@ def _append_ranked_articles_to_history(
     return updated_history
 
 
+def _select_candidate_articles(
+    articles: list[Article],
+    seen_article_ids: set[str],
+) -> list[Article]:
+    fresh_articles = _filter_fresh_articles(articles)
+    fresh_unseen_articles = _filter_seen_articles(fresh_articles, seen_article_ids)
+
+    if len(fresh_unseen_articles) >= 3:
+        return fresh_unseen_articles
+
+    unseen_articles = _filter_seen_articles(articles, seen_article_ids)
+
+    if len(unseen_articles) >= 3:
+        return unseen_articles
+
+    if len(fresh_articles) >= 3:
+        return fresh_articles
+
+    return articles
+
+
 def main() -> None:
     load_dotenv()
 
@@ -197,19 +209,9 @@ def main() -> None:
 
     seen_article_ids = _load_seen_article_ids()
     article_history = _load_article_history()
-    fresh_articles = _filter_fresh_articles(articles)
-    fresh_unseen_articles = _filter_seen_articles(fresh_articles, seen_article_ids)
-
-    if len(fresh_unseen_articles) >= 3:
-        candidate_articles = fresh_unseen_articles
-    else:
-        candidate_articles = _filter_seen_articles(articles, seen_article_ids)
-
-    if len(candidate_articles) < 3:
-        candidate_articles = fresh_articles if len(fresh_articles) >= 3 else articles
+    candidate_articles = _select_candidate_articles(articles, seen_article_ids)
 
     ranked_articles = rank_articles(candidate_articles, top_n=10)
-
     top_articles = apply_source_diversity(
         ranked_articles,
         max_per_source=1,
