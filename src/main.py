@@ -213,7 +213,7 @@ def main() -> None:
     top_articles = apply_source_diversity(
         ranked_articles,
         max_per_source=1,
-        final_count=3,
+        final_count=4,
     )
 
     digest = create_markdown_digest(top_articles)

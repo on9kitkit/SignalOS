@@ -1,98 +1,38 @@
-import hashlib
 import json
-from datetime import date, datetime, timedelta, timezone
-from email.utils import parsedate_to_datetime
+import os
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 from dotenv import load_dotenv
+from openai import OpenAI
 
 from src.delivery import send_to_discord
-from src.digest import create_markdown_digest
-from src.models import Article, RankedArticle
-from src.news_fetcher import fetch_articles
-from src.ranker import apply_source_diversity, rank_articles
 
 
 STATE_DIR = Path(".signalos_state")
-SEEN_ARTICLES_PATH = STATE_DIR / "seen_articles.json"
 ARTICLE_HISTORY_PATH = STATE_DIR / "article_history.json"
-MAX_SEEN_ARTICLES = 300
-MAX_ARTICLE_HISTORY_ITEMS = 90
-FRESH_ARTICLE_WINDOW_DAYS = 3
+WEEKLY_REPORTS_DIR = Path("weekly_reports")
+WEEKLY_LOOKBACK_DAYS = 7
+MODEL_NAME = "gpt-5.5"
 
 
-def _normalise_text(value: str) -> str:
-    return " ".join(value.lower().strip().split())
+def _get_openai_client() -> OpenAI:
+    api_key = os.getenv("OPENAI_API_KEY")
 
+    if not api_key:
+        raise RuntimeError(
+            "OPENAI_API_KEY is missing. Add it to SignalOS/.env or GitHub Secrets."
+        )
 
-def _article_fingerprint(article: Article) -> str:
-    fingerprint_source = f"{_normalise_text(article.title)}|{article.url.strip()}"
-    return hashlib.sha256(fingerprint_source.encode("utf-8")).hexdigest()
-
-
-def _parse_article_datetime(article: Article) -> datetime | None:
-    published = article.published.strip()
-
-    if not published or published.lower() == "unknown":
-        return None
-
-    try:
-        parsed_datetime = parsedate_to_datetime(published)
-    except (TypeError, ValueError):
-        return None
-
-    if parsed_datetime.tzinfo is None:
-        return parsed_datetime.replace(tzinfo=timezone.utc)
-
-    return parsed_datetime.astimezone(timezone.utc)
-
-
-def _filter_fresh_articles(
-    articles: list[Article],
-    window_days: int = FRESH_ARTICLE_WINDOW_DAYS,
-) -> list[Article]:
-    cutoff = datetime.now(timezone.utc) - timedelta(days=window_days)
-    fresh_articles: list[Article] = []
-
-    for article in articles:
-        published_at = _parse_article_datetime(article)
-
-        if published_at is None:
-            fresh_articles.append(article)
-            continue
-
-        if published_at >= cutoff:
-            fresh_articles.append(article)
-
-    return fresh_articles
-
-
-def _load_seen_article_ids() -> set[str]:
-    if not SEEN_ARTICLES_PATH.exists():
-        return set()
-
-    with SEEN_ARTICLES_PATH.open("r", encoding="utf-8") as file:
-        data = json.load(file)
-
-    if not isinstance(data, list):
-        raise RuntimeError("seen_articles.json must contain a JSON list.")
-
-    return {str(item) for item in data}
-
-
-def _save_seen_article_ids(seen_article_ids: set[str]) -> None:
-    STATE_DIR.mkdir(exist_ok=True)
-
-    compact_history = sorted(seen_article_ids)[-MAX_SEEN_ARTICLES:]
-
-    with SEEN_ARTICLES_PATH.open("w", encoding="utf-8") as file:
-        json.dump(compact_history, file, indent=2)
+    return OpenAI(api_key=api_key)
 
 
 def _load_article_history() -> list[dict[str, Any]]:
     if not ARTICLE_HISTORY_PATH.exists():
-        return []
+        raise RuntimeError(
+            "article_history.json does not exist yet. Run the daily agent first."
+        )
 
     with ARTICLE_HISTORY_PATH.open("r", encoding="utf-8") as file:
         data = json.load(file)
@@ -103,146 +43,126 @@ def _load_article_history() -> list[dict[str, Any]]:
     return [item for item in data if isinstance(item, dict)]
 
 
-def _save_article_history(article_history: list[dict[str, Any]]) -> None:
-    STATE_DIR.mkdir(exist_ok=True)
+def _parse_digest_date(entry: dict[str, Any]) -> date | None:
+    raw_date = entry.get("digest_date")
 
-    compact_history = article_history[-MAX_ARTICLE_HISTORY_ITEMS:]
+    if not isinstance(raw_date, str):
+        return None
 
-    with ARTICLE_HISTORY_PATH.open("w", encoding="utf-8") as file:
-        json.dump(compact_history, file, indent=2, ensure_ascii=False)
-
-
-def _filter_seen_articles(
-    articles: list[Article],
-    seen_article_ids: set[str],
-) -> list[Article]:
-    return [
-        article
-        for article in articles
-        if _article_fingerprint(article) not in seen_article_ids
-    ]
+    try:
+        return date.fromisoformat(raw_date)
+    except ValueError:
+        return None
 
 
-def _mark_ranked_articles_as_seen(
-    ranked_articles: list[RankedArticle],
-    seen_article_ids: set[str],
-) -> set[str]:
-    updated_seen_article_ids = set(seen_article_ids)
-
-    for ranked_article in ranked_articles:
-        updated_seen_article_ids.add(_article_fingerprint(ranked_article.article))
-
-    return updated_seen_article_ids
-
-
-def _ranked_article_to_history_entry(ranked_article: RankedArticle) -> dict[str, Any]:
-    article = ranked_article.article
-
-    return {
-        "digest_date": date.today().isoformat(),
-        "fingerprint": _article_fingerprint(article),
-        "title": article.title,
-        "url": article.url,
-        "source": article.source,
-        "published": article.published,
-        "summary": article.summary,
-        "relevance_score": ranked_article.relevance_score,
-        "quality_score": ranked_article.quality_score,
-        "importance_score": ranked_article.importance_score,
-        "final_score": ranked_article.final_score,
-        "reason": ranked_article.reason,
-        "action_takeaway": ranked_article.action_takeaway,
-    }
-
-
-def _append_ranked_articles_to_history(
-    ranked_articles: list[RankedArticle],
+def _filter_recent_history(
     article_history: list[dict[str, Any]],
+    lookback_days: int = WEEKLY_LOOKBACK_DAYS,
 ) -> list[dict[str, Any]]:
-    updated_history = list(article_history)
-    existing_fingerprints = {
-        str(item.get("fingerprint"))
-        for item in updated_history
-        if item.get("fingerprint")
-    }
+    cutoff = datetime.now().date() - timedelta(days=lookback_days)
+    recent_items: list[dict[str, Any]] = []
 
-    for ranked_article in ranked_articles:
-        entry = _ranked_article_to_history_entry(ranked_article)
+    for entry in article_history:
+        digest_date = _parse_digest_date(entry)
 
-        if entry["fingerprint"] in existing_fingerprints:
+        if digest_date is None:
             continue
 
-        updated_history.append(entry)
-        existing_fingerprints.add(entry["fingerprint"])
+        if digest_date >= cutoff:
+            recent_items.append(entry)
 
-    return updated_history
+    return recent_items
 
 
-def _select_candidate_articles(
-    articles: list[Article],
-    seen_article_ids: set[str],
-) -> list[Article]:
-    fresh_articles = _filter_fresh_articles(articles)
-    fresh_unseen_articles = _filter_seen_articles(fresh_articles, seen_article_ids)
+def _format_history_for_prompt(article_history: list[dict[str, Any]]) -> str:
+    formatted_items: list[str] = []
 
-    if len(fresh_unseen_articles) >= 3:
-        return fresh_unseen_articles
+    for index, entry in enumerate(article_history, start=1):
+        formatted_items.append(
+            "\n".join(
+                [
+                    f"Article {index}",
+                    f"Date: {entry.get('digest_date', 'Unknown')}",
+                    f"Title: {entry.get('title', 'Unknown')}",
+                    f"Source: {entry.get('source', 'Unknown')}",
+                    f"URL: {entry.get('url', 'Unknown')}",
+                    f"Reason: {entry.get('reason', 'Unknown')}",
+                    f"Action takeaway: {entry.get('action_takeaway', 'Unknown')}",
+                ]
+            )
+        )
 
-    unseen_articles = _filter_seen_articles(articles, seen_article_ids)
+    return "\n\n".join(formatted_items)
 
-    if len(unseen_articles) >= 3:
-        return unseen_articles
 
-    if len(fresh_articles) >= 3:
-        return fresh_articles
+def create_weekly_summary(article_history: list[dict[str, Any]]) -> str:
+    if not article_history:
+        raise RuntimeError("No recent article history available for weekly summary.")
 
-    return articles
+    client = _get_openai_client()
+    formatted_history = _format_history_for_prompt(article_history)
+
+    prompt = f"""
+You are SignalOS, a strategic intelligence analyst for an ambitious student-builder working on AI, Python, local LLMs, education SaaS, data science, and software projects.
+
+Create a weekly intelligence report from the selected daily articles below.
+
+Do not summarise every article one by one. Identify patterns, opportunities, and what the user should do next.
+
+Return Markdown using exactly this structure:
+
+# SignalOS Weekly Intelligence Report
+
+## 1. Executive Brief
+A short paragraph explaining the biggest shift this week.
+
+## 2. Key Patterns
+- 3 to 5 bullet points explaining repeated themes.
+
+## 3. Highest-Leverage Opportunity
+Explain the single best opportunity for a student-builder to exploit.
+
+## 4. Skill Compounding Plan
+- 3 concrete skills or concepts the user should learn or build next.
+
+## 5. Build Action For Next Week
+A specific project action the user can actually complete next week.
+
+## 6. Watchlist
+- 3 things to monitor next week.
+
+Article history:
+{formatted_history}
+""".strip()
+
+    response = client.responses.create(
+        model=MODEL_NAME,
+        input=prompt,
+    )
+
+    return response.output_text.strip()
+
+
+def save_weekly_summary(summary: str) -> Path:
+    WEEKLY_REPORTS_DIR.mkdir(exist_ok=True)
+    report_path = WEEKLY_REPORTS_DIR / f"{date.today().isoformat()}.md"
+
+    with report_path.open("w", encoding="utf-8") as file:
+        file.write(summary)
+
+    return report_path
 
 
 def main() -> None:
     load_dotenv()
 
-    articles = fetch_articles(limit_per_source=8)
-
-    if not articles:
-        raise RuntimeError("No articles were fetched.")
-
-    seen_article_ids = _load_seen_article_ids()
     article_history = _load_article_history()
-    candidate_articles = _select_candidate_articles(articles, seen_article_ids)
+    recent_history = _filter_recent_history(article_history)
+    summary = create_weekly_summary(recent_history)
 
-    ranked_articles = rank_articles(candidate_articles, top_n=10)
-    top_articles = apply_source_diversity(
-        ranked_articles,
-        max_per_source=1,
-        final_count=3,
-    )
-
-    digest = create_markdown_digest(top_articles)
-
-    print(digest)
-
-    digest_dir = Path("digests")
-    digest_dir.mkdir(exist_ok=True)
-
-    digest_path = digest_dir / f"{date.today().isoformat()}.md"
-
-    with digest_path.open("w", encoding="utf-8") as file:
-        file.write(digest)
-
-    send_to_discord(digest)
-
-    updated_seen_article_ids = _mark_ranked_articles_as_seen(
-        top_articles,
-        seen_article_ids,
-    )
-    updated_article_history = _append_ranked_articles_to_history(
-        top_articles,
-        article_history,
-    )
-
-    _save_seen_article_ids(updated_seen_article_ids)
-    _save_article_history(updated_article_history)
+    print(summary)
+    save_weekly_summary(summary)
+    send_to_discord(summary)
 
 
 if __name__ == "__main__":
