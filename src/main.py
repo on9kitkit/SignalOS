@@ -8,7 +8,7 @@ from typing import Any
 from dotenv import load_dotenv
 
 from src.delivery import send_to_discord
-from src.digest import create_markdown_digest
+from src.digest import create_article_feedback_messages, create_markdown_digest
 from src.models import Article, RankedArticle
 from src.news_fetcher import fetch_articles
 from src.ranker import apply_source_diversity, rank_articles
@@ -228,7 +228,8 @@ def main() -> None:
     with digest_path.open("w", encoding="utf-8") as file:
         file.write(digest)
 
-    send_to_discord(digest)
+    for article_message in create_article_feedback_messages(top_articles):
+        send_to_discord(article_message)
 
     updated_seen_article_ids = _mark_ranked_articles_as_seen(
         top_articles,
