@@ -6,10 +6,12 @@ from src.models import RankedArticle
 def create_markdown_digest(ranked_articles: list[RankedArticle]) -> str:
     today = date.today().isoformat()
 
+    signal_count = len(ranked_articles)
+
     lines: list[str] = [
         f"# SignalOS Daily Brief — {today}",
         "",
-        "## Top 3 Strategic Signals",
+        f"## Top {signal_count} Strategic Signals",
         "",
     ]
 
@@ -34,5 +36,22 @@ def create_markdown_digest(ranked_articles: list[RankedArticle]) -> str:
                 "",
             ]
         )
+
+    lines.extend(
+        [
+            "## Feedback",
+            "",
+            "Rate today's digest from 1–5:",
+            "",
+            "- 1 = useless",
+            "- 2 = weak",
+            "- 3 = decent",
+            "- 4 = useful",
+            "- 5 = extremely useful",
+            "",
+            "Optional: reply with what should be more or less included.",
+            "",
+        ]
+    )
 
     return "\n".join(lines)
