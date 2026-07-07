@@ -3,3 +3,7 @@ python-dotenv
 openai
 requests
 pydantic
+fastapi
+uvicorn
+jinja2
+python-multipart
