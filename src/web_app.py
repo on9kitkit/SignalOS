@@ -149,6 +149,13 @@ def _plain_text(value: Any, fallback: str = "") -> str:
     return str(value)
 
 
+def _score_number(value: Any) -> float | None:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def _redirect_home() -> RedirectResponse:
     return RedirectResponse("/", status_code=303)
 
@@ -198,6 +205,27 @@ def dashboard_home(rated: str | None = None) -> str:
         latest_articles[0].get("digest_date") if latest_articles else None,
         "No digest yet",
     )
+    article_count = len(latest_articles)
+    rated_count = sum(
+        1
+        for article in latest_articles
+        if _plain_text(article.get("fingerprint")) in feedback_by_article
+    )
+    score_values = [
+        score
+        for article in latest_articles
+        if (score := _score_number(article.get("final_score"))) is not None
+    ]
+    average_score = (
+        f"{sum(score_values) / len(score_values):.1f}"
+        if score_values
+        else "N/A"
+    )
+    feedback_status = (
+        f"{rated_count}/{article_count} rated"
+        if article_count
+        else "No feedback yet"
+    )
     success_banner_html = ""
     if rated == "1":
         success_banner_html = """
@@ -208,9 +236,9 @@ def dashboard_home(rated: str | None = None) -> str:
         """
 
     article_cards: list[str] = []
-    article_count = len(latest_articles)
 
     for article_index, article in enumerate(latest_articles, start=1):
+        card_class = "article-card article-card-featured" if article_index == 1 else "article-card"
         title = _html_text(article.get("title"), "Untitled")
         source = _html_text(article.get("source"), "Unknown source")
         score = _html_text(article.get("final_score"), "Unknown")
@@ -253,7 +281,7 @@ def dashboard_home(rated: str | None = None) -> str:
             """
 
         article_cards.append(f"""
-        <article class="article-card">
+        <article class="{card_class}">
             <div class="card-topline">
                 <div class="badge-row">
                     <span class="signal-badge">Signal {article_index}/{article_count}</span>
@@ -298,13 +326,17 @@ def dashboard_home(rated: str | None = None) -> str:
             <style>
                 :root {{
                     color-scheme: dark;
-                    --panel: rgba(15, 23, 42, 0.78);
-                    --panel-strong: rgba(18, 26, 45, 0.94);
+                    --panel: rgba(12, 19, 34, 0.82);
+                    --panel-strong: rgba(15, 24, 42, 0.96);
+                    --panel-soft: rgba(7, 10, 18, 0.42);
                     --text: #edf3ff;
                     --muted: #9ca9c5;
                     --line: rgba(148, 163, 184, 0.18);
+                    --line-strong: rgba(125, 211, 252, 0.34);
                     --accent: #7dd3fc;
                     --signal: #a7f3d0;
+                    --gold: #fde68a;
+                    --shadow: 0 24px 80px rgba(0, 0, 0, 0.34);
                     font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
                 }}
 
@@ -316,30 +348,40 @@ def dashboard_home(rated: str | None = None) -> str:
                     min-height: 100vh;
                     margin: 0;
                     background:
-                        radial-gradient(circle at top left, rgba(56, 189, 248, 0.18), transparent 34rem),
-                        radial-gradient(circle at top right, rgba(167, 243, 208, 0.12), transparent 30rem),
-                        linear-gradient(135deg, #070a12 0%, #0d1424 48%, #111827 100%);
+                        radial-gradient(circle at 12% 0%, rgba(56, 189, 248, 0.18), transparent 34rem),
+                        radial-gradient(circle at 90% 8%, rgba(167, 243, 208, 0.12), transparent 30rem),
+                        linear-gradient(135deg, #070a12 0%, #0d1424 44%, #111827 100%);
+                    background-attachment: fixed;
                     color: var(--text);
                 }}
 
                 main {{
-                    width: min(1180px, calc(100% - 40px));
+                    width: min(1220px, calc(100% - 40px));
                     margin: 0 auto;
-                    padding: 44px 0 56px;
+                    padding: 42px 0 40px;
                 }}
 
                 .page-header {{
-                    display: flex;
-                    align-items: flex-end;
-                    justify-content: space-between;
+                    display: grid;
+                    grid-template-columns: minmax(0, 1.35fr) minmax(300px, 0.65fr);
+                    align-items: stretch;
                     gap: 24px;
-                    margin-bottom: 28px;
-                    padding: 28px;
-                    border: 1px solid var(--line);
-                    border-radius: 28px;
-                    background: linear-gradient(135deg, rgba(15, 23, 42, 0.76), rgba(15, 23, 42, 0.42));
-                    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.28);
+                    margin-bottom: 22px;
+                    padding: 30px;
+                    border: 1px solid rgba(125, 211, 252, 0.18);
+                    border-radius: 18px;
+                    background:
+                        linear-gradient(135deg, rgba(15, 23, 42, 0.9), rgba(8, 13, 24, 0.74)),
+                        radial-gradient(circle at 16% 0%, rgba(125, 211, 252, 0.16), transparent 26rem);
+                    box-shadow: var(--shadow);
                     backdrop-filter: blur(18px);
+                }}
+
+                .hero-copy {{
+                    display: flex;
+                    min-height: 220px;
+                    flex-direction: column;
+                    justify-content: center;
                 }}
 
                 .eyebrow {{
@@ -385,19 +427,33 @@ def dashboard_home(rated: str | None = None) -> str:
                     font-weight: 800;
                 }}
 
-                .header-stat {{
-                    min-width: 150px;
+                .meta-pill-soft {{
+                    border-color: rgba(167, 243, 208, 0.22);
+                    background: rgba(16, 185, 129, 0.08);
+                    color: #c8ffe6;
+                }}
+
+                .hero-stats {{
+                    display: grid;
+                    grid-template-columns: 1fr;
+                    gap: 12px;
+                }}
+
+                .hero-stat {{
+                    display: grid;
+                    align-content: center;
+                    min-height: 0;
                     padding: 18px;
                     border: 1px solid var(--line);
-                    border-radius: 22px;
-                    background: rgba(7, 10, 18, 0.42);
-                    text-align: right;
+                    border-radius: 8px;
+                    background: linear-gradient(135deg, rgba(7, 10, 18, 0.58), rgba(15, 23, 42, 0.38));
+                    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
                 }}
 
                 .stat-number {{
                     display: block;
-                    color: var(--signal);
-                    font-size: 2.4rem;
+                    color: #dffcff;
+                    font-size: 2.25rem;
                     font-weight: 900;
                     line-height: 1;
                 }}
@@ -413,10 +469,10 @@ def dashboard_home(rated: str | None = None) -> str:
                     display: flex;
                     align-items: center;
                     gap: 12px;
-                    margin: -10px 0 24px;
+                    margin: 0 0 24px;
                     padding: 14px 16px;
-                    border: 1px solid rgba(167, 243, 208, 0.3);
-                    border-radius: 18px;
+                    border: 1px solid rgba(167, 243, 208, 0.34);
+                    border-radius: 8px;
                     background: linear-gradient(135deg, rgba(20, 184, 166, 0.18), rgba(34, 197, 94, 0.1));
                     box-shadow: 0 16px 50px rgba(0, 0, 0, 0.2);
                 }}
@@ -430,35 +486,97 @@ def dashboard_home(rated: str | None = None) -> str:
                     box-shadow: 0 0 0 6px rgba(167, 243, 208, 0.12);
                 }}
 
+                .section-heading {{
+                    display: flex;
+                    align-items: flex-end;
+                    justify-content: space-between;
+                    gap: 20px;
+                    margin: 28px 0 16px;
+                }}
+
+                .section-title {{
+                    margin: 0;
+                    font-size: 1.45rem;
+                    line-height: 1.2;
+                }}
+
+                .feedback-status {{
+                    display: grid;
+                    gap: 4px;
+                    min-width: 180px;
+                    padding: 12px 14px;
+                    border: 1px solid rgba(167, 243, 208, 0.2);
+                    border-radius: 8px;
+                    background: rgba(7, 10, 18, 0.32);
+                    text-align: right;
+                }}
+
+                .feedback-status span {{
+                    color: var(--muted);
+                    font-size: 0.76rem;
+                    font-weight: 800;
+                    letter-spacing: 0.08em;
+                    text-transform: uppercase;
+                }}
+
+                .feedback-status strong {{
+                    color: var(--signal);
+                    font-size: 1rem;
+                }}
+
                 .article-grid {{
                     display: grid;
-                    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-                    gap: 18px;
+                    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+                    gap: 20px;
                 }}
 
                 .article-card {{
                     display: flex;
-                    min-height: 360px;
+                    position: relative;
+                    min-height: 380px;
                     flex-direction: column;
-                    gap: 18px;
-                    padding: 22px;
+                    gap: 20px;
+                    padding: 24px;
                     border: 1px solid var(--line);
-                    border-radius: 24px;
+                    border-radius: 8px;
                     background: var(--panel);
-                    box-shadow: 0 18px 60px rgba(0, 0, 0, 0.24);
+                    box-shadow: 0 18px 60px rgba(0, 0, 0, 0.22);
                     backdrop-filter: blur(16px);
-                    transition: border-color 180ms ease, transform 180ms ease, background 180ms ease;
+                    overflow: hidden;
+                    transition: border-color 180ms ease, transform 180ms ease, background 180ms ease, box-shadow 180ms ease;
+                }}
+
+                .article-card::before {{
+                    content: "";
+                    position: absolute;
+                    inset: 0;
+                    border-top: 1px solid rgba(255, 255, 255, 0.05);
+                    pointer-events: none;
                 }}
 
                 .article-card:hover {{
-                    transform: translateY(-3px);
-                    border-color: rgba(125, 211, 252, 0.42);
+                    transform: translateY(-5px);
+                    border-color: rgba(125, 211, 252, 0.46);
                     background: var(--panel-strong);
+                    box-shadow: 0 28px 80px rgba(0, 0, 0, 0.34);
+                }}
+
+                .article-card-featured {{
+                    border-color: rgba(125, 211, 252, 0.42);
+                    background:
+                        linear-gradient(145deg, rgba(14, 165, 233, 0.13), transparent 44%),
+                        var(--panel);
+                }}
+
+                .article-card-featured .signal-badge {{
+                    border-color: rgba(125, 211, 252, 0.34);
+                    background: rgba(14, 165, 233, 0.16);
+                    color: #e0f7ff;
                 }}
 
                 .card-topline {{
                     display: flex;
-                    align-items: center;
+                    align-items: flex-start;
                     justify-content: space-between;
                     gap: 12px;
                 }}
@@ -468,6 +586,7 @@ def dashboard_home(rated: str | None = None) -> str:
                     align-items: center;
                     gap: 8px;
                     min-width: 0;
+                    flex-wrap: wrap;
                 }}
 
                 .signal-badge,
@@ -510,12 +629,17 @@ def dashboard_home(rated: str | None = None) -> str:
 
                 h2 {{
                     margin: 0;
-                    font-size: 1.25rem;
-                    line-height: 1.35;
+                    font-size: 1.22rem;
+                    line-height: 1.32;
+                    letter-spacing: 0;
+                }}
+
+                .article-card-featured h2 {{
+                    font-size: 1.38rem;
                 }}
 
                 .card-section {{
-                    padding-top: 2px;
+                    padding-top: 4px;
                 }}
 
                 .label {{
@@ -530,7 +654,7 @@ def dashboard_home(rated: str | None = None) -> str:
                 p {{
                     margin: 0;
                     color: #cbd5e1;
-                    line-height: 1.6;
+                    line-height: 1.62;
                 }}
 
                 .article-link {{
@@ -538,21 +662,24 @@ def dashboard_home(rated: str | None = None) -> str:
                     align-items: center;
                     justify-content: center;
                     width: fit-content;
-                    padding: 11px 15px;
+                    min-height: 40px;
+                    padding: 10px 15px;
                     border: 1px solid rgba(125, 211, 252, 0.34);
-                    border-radius: 14px;
+                    border-radius: 8px;
                     background: linear-gradient(135deg, rgba(56, 189, 248, 0.22), rgba(167, 243, 208, 0.12));
                     color: var(--text);
                     font-size: 0.9rem;
                     font-weight: 850;
                     text-decoration: none;
-                    transition: border-color 180ms ease, transform 180ms ease, background 180ms ease;
+                    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+                    transition: border-color 180ms ease, transform 180ms ease, background 180ms ease, box-shadow 180ms ease;
                 }}
 
                 .article-link:hover {{
-                    transform: translateY(-1px);
+                    transform: translateY(-2px);
                     border-color: rgba(167, 243, 208, 0.58);
                     background: linear-gradient(135deg, rgba(56, 189, 248, 0.32), rgba(167, 243, 208, 0.2));
+                    box-shadow: 0 10px 24px rgba(8, 145, 178, 0.14);
                 }}
 
                 .card-actions {{
@@ -566,16 +693,17 @@ def dashboard_home(rated: str | None = None) -> str:
 
                 .feedback-panel {{
                     display: grid;
-                    gap: 8px;
-                    padding: 12px;
-                    border: 1px solid rgba(125, 211, 252, 0.14);
-                    border-radius: 16px;
-                    background: rgba(7, 10, 18, 0.24);
+                    gap: 10px;
+                    min-width: 224px;
+                    padding: 13px;
+                    border: 1px solid rgba(125, 211, 252, 0.18);
+                    border-radius: 8px;
+                    background: linear-gradient(135deg, rgba(7, 10, 18, 0.42), rgba(15, 23, 42, 0.28));
                 }}
 
                 .rating-row {{
                     display: flex;
-                    gap: 6px;
+                    gap: 7px;
                     flex-wrap: wrap;
                 }}
 
@@ -587,10 +715,10 @@ def dashboard_home(rated: str | None = None) -> str:
                     display: inline-flex;
                     align-items: center;
                     justify-content: center;
-                    width: 34px;
-                    height: 34px;
+                    width: 36px;
+                    height: 36px;
                     border: 1px solid rgba(167, 243, 208, 0.28);
-                    border-radius: 12px;
+                    border-radius: 8px;
                     background: rgba(167, 243, 208, 0.08);
                     color: var(--text);
                     font: inherit;
@@ -602,7 +730,7 @@ def dashboard_home(rated: str | None = None) -> str:
 
                 .rating-button:hover,
                 .rating-button:focus-visible {{
-                    transform: translateY(-1px);
+                    transform: translateY(-2px);
                     border-color: rgba(167, 243, 208, 0.64);
                     background: rgba(167, 243, 208, 0.18);
                     outline: none;
@@ -610,14 +738,18 @@ def dashboard_home(rated: str | None = None) -> str:
 
                 .saved-feedback {{
                     display: grid;
-                    gap: 4px;
-                    min-width: 180px;
-                    padding: 13px 14px;
-                    border: 1px solid rgba(167, 243, 208, 0.32);
-                    border-radius: 16px;
-                    background: linear-gradient(135deg, rgba(20, 184, 166, 0.18), rgba(34, 197, 94, 0.1));
+                    gap: 6px;
+                    min-width: 224px;
+                    padding: 14px 15px;
+                    border: 1px solid rgba(167, 243, 208, 0.46);
+                    border-radius: 8px;
+                    background:
+                        linear-gradient(135deg, rgba(20, 184, 166, 0.24), rgba(34, 197, 94, 0.12)),
+                        rgba(7, 10, 18, 0.24);
                     color: var(--text);
-                    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+                    box-shadow:
+                        inset 0 1px 0 rgba(255, 255, 255, 0.07),
+                        0 14px 34px rgba(20, 184, 166, 0.08);
                 }}
 
                 .saved-kicker {{
@@ -628,12 +760,65 @@ def dashboard_home(rated: str | None = None) -> str:
                     text-transform: uppercase;
                 }}
 
+                .saved-feedback strong {{
+                    color: #f0fdfa;
+                    font-size: 1.02rem;
+                }}
+
                 .empty-state {{
                     padding: 28px;
                     border: 1px dashed rgba(148, 163, 184, 0.32);
-                    border-radius: 24px;
+                    border-radius: 8px;
                     background: rgba(15, 23, 42, 0.64);
                     text-align: center;
+                }}
+
+                .dashboard-footer {{
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    gap: 12px;
+                    flex-wrap: wrap;
+                    margin-top: 28px;
+                    padding: 16px;
+                    border: 1px solid rgba(148, 163, 184, 0.14);
+                    border-radius: 8px;
+                    background: rgba(7, 10, 18, 0.24);
+                    color: var(--muted);
+                    font-size: 0.84rem;
+                }}
+
+                .dashboard-footer span {{
+                    color: var(--accent);
+                    font-weight: 900;
+                    letter-spacing: 0.08em;
+                    text-transform: uppercase;
+                }}
+
+                .dashboard-footer strong {{
+                    color: #dbeafe;
+                    font-weight: 800;
+                }}
+
+                @media (min-width: 940px) {{
+                    .article-card-featured {{
+                        grid-column: span 2;
+                        min-height: 340px;
+                    }}
+                }}
+
+                @media (max-width: 900px) {{
+                    .page-header {{
+                        grid-template-columns: 1fr;
+                    }}
+
+                    .hero-copy {{
+                        min-height: auto;
+                    }}
+
+                    .hero-stats {{
+                        grid-template-columns: repeat(3, minmax(0, 1fr));
+                    }}
                 }}
 
                 @media (max-width: 760px) {{
@@ -643,14 +828,24 @@ def dashboard_home(rated: str | None = None) -> str:
                     }}
 
                     .page-header {{
-                        display: block;
                         padding: 22px;
-                        border-radius: 22px;
+                        border-radius: 12px;
                     }}
 
-                    .header-stat {{
-                        width: 100%;
-                        margin-top: 20px;
+                    h1 {{
+                        font-size: 2.25rem;
+                    }}
+
+                    .hero-stats {{
+                        grid-template-columns: 1fr;
+                    }}
+
+                    .section-heading {{
+                        align-items: stretch;
+                        flex-direction: column;
+                    }}
+
+                    .feedback-status {{
                         text-align: left;
                     }}
 
@@ -661,29 +856,67 @@ def dashboard_home(rated: str | None = None) -> str:
                     .article-card {{
                         min-height: auto;
                     }}
+
+                    .card-actions {{
+                        align-items: stretch;
+                        flex-direction: column;
+                    }}
+
+                    .article-link,
+                    .feedback-panel,
+                    .saved-feedback {{
+                        width: 100%;
+                    }}
                 }}
             </style>
         </head>
         <body>
             <main>
                 <header class="page-header">
-                    <div>
+                    <div class="hero-copy">
                         <p class="eyebrow">Personal intelligence OS</p>
                         <h1>SignalOS Dashboard</h1>
                         <p class="subtitle">Latest strategic signals from article history, ranked into a clean briefing surface.</p>
                         <div class="header-meta">
                             <span class="meta-pill">Latest digest: {latest_digest_date}</span>
+                            <span class="meta-pill meta-pill-soft">Feedback status: {feedback_status}</span>
                         </div>
                     </div>
-                    <aside class="header-stat" aria-label="Latest article count">
-                        <span class="stat-number">{len(latest_articles)}</span>
-                        <span class="stat-label">latest signals</span>
+                    <aside class="hero-stats" aria-label="Dashboard stats">
+                        <div class="hero-stat">
+                            <span class="stat-number">{article_count}</span>
+                            <span class="stat-label">signals shown</span>
+                        </div>
+                        <div class="hero-stat">
+                            <span class="stat-number">{rated_count}</span>
+                            <span class="stat-label">rated signals</span>
+                        </div>
+                        <div class="hero-stat">
+                            <span class="stat-number">{average_score}</span>
+                            <span class="stat-label">avg score</span>
+                        </div>
                     </aside>
                 </header>
                 {success_banner_html}
+                <section class="section-heading" aria-label="Daily Signals">
+                    <div>
+                        <p class="eyebrow">Daily Signals</p>
+                        <h2 class="section-title">Today's ranked brief</h2>
+                    </div>
+                    <div class="feedback-status">
+                        <span>Feedback status</span>
+                        <strong>{feedback_status}</strong>
+                    </div>
+                </section>
                 <section class="article-grid" aria-label="Latest articles">
                     {article_cards_html}
                 </section>
+                <footer class="dashboard-footer" aria-label="Dashboard status">
+                    <span>SignalOS status</span>
+                    <strong>{article_count} signals shown</strong>
+                    <strong>{rated_count} rated</strong>
+                    <strong>Average score {average_score}</strong>
+                </footer>
             </main>
         </body>
     </html>
