@@ -12,6 +12,10 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 STATE_DIR = Path(".signalos_state")
 ARTICLE_HISTORY_PATH = STATE_DIR / "article_history.json"
 FEEDBACK_PATH = STATE_DIR / "feedback.json"
+WEEKLY_REPORT_DIRS = (
+    Path("weekly_reports"),
+    Path("src/weekly_reports"),
+)
 
 app = FastAPI(title="SignalOS Dashboard")
 
@@ -43,6 +47,103 @@ def _latest_digest_articles(article_history: list[dict[str, Any]]) -> list[dict[
         for article in article_history
         if article.get("digest_date") == latest_date
     ]
+
+
+def _latest_weekly_report_path() -> Path | None:
+    for report_dir in WEEKLY_REPORT_DIRS:
+        if not report_dir.is_dir():
+            continue
+
+        report_paths = [path for path in report_dir.glob("*.md") if path.is_file()]
+        if report_paths:
+            return max(report_paths, key=_weekly_report_sort_key)
+
+    return None
+
+
+def _weekly_report_sort_key(report_path: Path) -> tuple[float, str]:
+    try:
+        modified_at = report_path.stat().st_mtime
+    except OSError:
+        modified_at = 0.0
+
+    return (modified_at, report_path.name)
+
+
+def _load_latest_weekly_report() -> tuple[str, str] | None:
+    report_path = _latest_weekly_report_path()
+    if report_path is None:
+        return None
+
+    try:
+        report_content = report_path.read_text(encoding="utf-8")
+    except OSError:
+        return None
+
+    return (report_path.name, report_content)
+
+
+def _simple_markdown_to_html(markdown_text: str) -> str:
+    html_parts: list[str] = []
+    paragraph_lines: list[str] = []
+    bullet_items: list[str] = []
+
+    def flush_paragraph() -> None:
+        if not paragraph_lines:
+            return
+
+        paragraph_text = " ".join(line.strip() for line in paragraph_lines)
+        html_parts.append(f"<p>{escape(paragraph_text)}</p>")
+        paragraph_lines.clear()
+
+    def flush_bullets() -> None:
+        if not bullet_items:
+            return
+
+        items_html = "".join(f"<li>{escape(item)}</li>" for item in bullet_items)
+        html_parts.append(f"<ul>{items_html}</ul>")
+        bullet_items.clear()
+
+    for raw_line in markdown_text.splitlines():
+        line = raw_line.strip()
+        if not line:
+            flush_paragraph()
+            flush_bullets()
+            continue
+
+        if line.startswith("### "):
+            flush_paragraph()
+            flush_bullets()
+            html_parts.append(f"<h5>{escape(line[4:].strip())}</h5>")
+            continue
+
+        if line.startswith("## "):
+            flush_paragraph()
+            flush_bullets()
+            html_parts.append(f"<h4>{escape(line[3:].strip())}</h4>")
+            continue
+
+        if line.startswith("# "):
+            flush_paragraph()
+            flush_bullets()
+            html_parts.append(f"<h3>{escape(line[2:].strip())}</h3>")
+            continue
+
+        if line.startswith("- "):
+            flush_paragraph()
+            bullet_items.append(line[2:].strip())
+            continue
+
+        flush_bullets()
+        paragraph_lines.append(line)
+
+    flush_paragraph()
+    flush_bullets()
+
+    if not html_parts:
+        return "<p>This weekly report is empty.</p>"
+
+    return "\n".join(html_parts)
 
 
 def _load_feedback_entries() -> list[dict[str, Any]]:
@@ -226,6 +327,40 @@ def dashboard_home(rated: str | None = None) -> str:
         if article_count
         else "No feedback yet"
     )
+    weekly_report = _load_latest_weekly_report()
+    if weekly_report is None:
+        weekly_report_html = """
+        <section class="weekly-panel weekly-panel-empty" aria-label="Weekly Intelligence">
+            <div class="weekly-panel-header">
+                <div>
+                    <p class="eyebrow">Weekly Intelligence</p>
+                    <h2 class="weekly-title">Strategic weekly readout</h2>
+                </div>
+                <span class="weekly-report-badge">No report</span>
+            </div>
+            <div class="weekly-empty-state">
+                <p>No weekly report generated yet.</p>
+            </div>
+        </section>
+        """
+    else:
+        report_name, report_content = weekly_report
+        weekly_report_name = _html_text(report_name, "Latest weekly report")
+        weekly_report_content_html = _simple_markdown_to_html(report_content)
+        weekly_report_html = f"""
+        <section class="weekly-panel" aria-label="Weekly Intelligence">
+            <div class="weekly-panel-header">
+                <div>
+                    <p class="eyebrow">Weekly Intelligence</p>
+                    <h2 class="weekly-title">Strategic weekly readout</h2>
+                </div>
+                <span class="weekly-report-badge">{weekly_report_name}</span>
+            </div>
+            <div class="weekly-content">
+                {weekly_report_content_html}
+            </div>
+        </section>
+        """
     success_banner_html = ""
     if rated == "1":
         success_banner_html = """
@@ -484,6 +619,109 @@ def dashboard_home(rated: str | None = None) -> str:
                     border-radius: 999px;
                     background: var(--signal);
                     box-shadow: 0 0 0 6px rgba(167, 243, 208, 0.12);
+                }}
+
+                .weekly-panel {{
+                    display: grid;
+                    gap: 18px;
+                    margin: 0 0 30px;
+                    padding: 24px;
+                    border: 1px solid rgba(125, 211, 252, 0.18);
+                    border-radius: 8px;
+                    background:
+                        linear-gradient(135deg, rgba(14, 165, 233, 0.1), transparent 34%),
+                        rgba(12, 19, 34, 0.78);
+                    box-shadow: 0 18px 60px rgba(0, 0, 0, 0.22);
+                    backdrop-filter: blur(16px);
+                }}
+
+                .weekly-panel-header {{
+                    display: flex;
+                    align-items: flex-start;
+                    justify-content: space-between;
+                    gap: 18px;
+                }}
+
+                .weekly-title {{
+                    margin: 0;
+                    font-size: 1.5rem;
+                    line-height: 1.2;
+                }}
+
+                .weekly-report-badge {{
+                    display: inline-flex;
+                    align-items: center;
+                    max-width: min(100%, 360px);
+                    min-height: 34px;
+                    padding: 8px 12px;
+                    overflow: hidden;
+                    border: 1px solid rgba(167, 243, 208, 0.24);
+                    border-radius: 999px;
+                    background: rgba(16, 185, 129, 0.08);
+                    color: #d1fae5;
+                    font-size: 0.82rem;
+                    font-weight: 850;
+                    text-overflow: ellipsis;
+                    white-space: nowrap;
+                }}
+
+                .weekly-content {{
+                    display: grid;
+                    gap: 12px;
+                    max-height: 460px;
+                    overflow: auto;
+                    padding: 18px;
+                    border: 1px solid rgba(148, 163, 184, 0.14);
+                    border-radius: 8px;
+                    background: rgba(7, 10, 18, 0.3);
+                }}
+
+                .weekly-content h3,
+                .weekly-content h4,
+                .weekly-content h5 {{
+                    margin: 0;
+                    color: #f8fbff;
+                    line-height: 1.25;
+                    letter-spacing: 0;
+                }}
+
+                .weekly-content h3 {{
+                    font-size: 1.25rem;
+                }}
+
+                .weekly-content h4 {{
+                    color: #dffcff;
+                    font-size: 1.08rem;
+                }}
+
+                .weekly-content h5 {{
+                    color: var(--signal);
+                    font-size: 0.95rem;
+                    text-transform: uppercase;
+                }}
+
+                .weekly-content p {{
+                    color: #d0d8e8;
+                }}
+
+                .weekly-content ul {{
+                    display: grid;
+                    gap: 8px;
+                    margin: 0;
+                    padding-left: 1.2rem;
+                    color: #d0d8e8;
+                    line-height: 1.58;
+                }}
+
+                .weekly-content li::marker {{
+                    color: var(--signal);
+                }}
+
+                .weekly-empty-state {{
+                    padding: 18px;
+                    border: 1px dashed rgba(148, 163, 184, 0.32);
+                    border-radius: 8px;
+                    background: rgba(7, 10, 18, 0.26);
                 }}
 
                 .section-heading {{
@@ -840,6 +1078,15 @@ def dashboard_home(rated: str | None = None) -> str:
                         grid-template-columns: 1fr;
                     }}
 
+                    .weekly-panel-header {{
+                        align-items: stretch;
+                        flex-direction: column;
+                    }}
+
+                    .weekly-report-badge {{
+                        max-width: 100%;
+                    }}
+
                     .section-heading {{
                         align-items: stretch;
                         flex-direction: column;
@@ -898,6 +1145,7 @@ def dashboard_home(rated: str | None = None) -> str:
                     </aside>
                 </header>
                 {success_banner_html}
+                {weekly_report_html}
                 <section class="section-heading" aria-label="Daily Signals">
                     <div>
                         <p class="eyebrow">Daily Signals</p>
