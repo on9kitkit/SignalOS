@@ -7,6 +7,7 @@ from typing import Any
 from dotenv import load_dotenv
 from openai import OpenAI
 
+from src.config import SIGNALOS_WEEKLY_MODEL
 from src.delivery import send_to_discord
 
 
@@ -14,9 +15,6 @@ STATE_DIR = Path(".signalos_state")
 ARTICLE_HISTORY_PATH = STATE_DIR / "article_history.json"
 WEEKLY_REPORTS_DIR = Path("weekly_reports")
 WEEKLY_LOOKBACK_DAYS = 7
-MODEL_NAME = "gpt-5.5"
-
-
 def _get_openai_client() -> OpenAI:
     api_key = os.getenv("OPENAI_API_KEY")
 
@@ -136,7 +134,7 @@ Article history:
 """.strip()
 
     response = client.responses.create(
-        model=MODEL_NAME,
+        model=SIGNALOS_WEEKLY_MODEL,
         input=prompt,
     )
 

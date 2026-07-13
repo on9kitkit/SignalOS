@@ -4,11 +4,8 @@ from typing import Any
 
 from openai import OpenAI
 
-from src.config import USER_PROFILE
+from src.config import SIGNALOS_RANKER_MODEL, USER_PROFILE
 from src.models import Article, RankedArticle
-
-
-MODEL_NAME = "gpt-5.5"
 
 
 def _get_openai_client() -> OpenAI:
@@ -192,7 +189,7 @@ Articles:
 """.strip()
 
     response = client.responses.create(
-        model=MODEL_NAME,
+        model=SIGNALOS_RANKER_MODEL,
         input=prompt,
     )
 

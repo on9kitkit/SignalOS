@@ -1,3 +1,11 @@
+import os
+
+
+# These models can be overridden in .env without changing Python code.
+SIGNALOS_RANKER_MODEL = os.getenv("SIGNALOS_RANKER_MODEL", "gpt-5.6-luna")
+SIGNALOS_WEEKLY_MODEL = os.getenv("SIGNALOS_WEEKLY_MODEL", "gpt-5.6-luna")
+
+
 USER_PROFILE = """
 The user is a 15-year-old UK student and ambitious programmer.
 
