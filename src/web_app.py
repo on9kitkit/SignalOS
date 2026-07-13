@@ -388,15 +388,15 @@ def dashboard_home(rated: str | None = None) -> str:
         saved_feedback = feedback_by_article.get(fingerprint_raw)
         if saved_feedback is None:
             feedback_html = f"""
-            <div class="feedback-panel" aria-label="Article feedback">
+            <div class="feedback-panel" data-feedback-region aria-label="Article feedback">
                 <p class="label">Feedback</p>
                 <div class="rating-row">
                     {"".join(
                         f'''
-                        <form class="rating-form" method="post" action="/feedback">
+                        <form class="rating-form" method="post" action="/feedback" data-feedback-form>
                             <input type="hidden" name="fingerprint" value="{fingerprint}">
                             <input type="hidden" name="rating" value="{rating_value}">
-                            <button class="rating-button" type="submit" aria-label="Rate this article {rating_value} out of 5">
+                            <button class="rating-button" type="submit" data-rating-value="{rating_value}" aria-label="Rate this article {rating_value} out of 5">
                                 {rating_value}
                             </button>
                         </form>
@@ -409,7 +409,7 @@ def dashboard_home(rated: str | None = None) -> str:
         else:
             saved_rating = _html_text(saved_feedback.get("rating"), "?")
             feedback_html = f"""
-            <div class="saved-feedback" aria-label="Saved article feedback">
+            <div class="saved-feedback" data-feedback-region aria-label="Saved article feedback">
                 <span class="saved-kicker">Feedback saved</span>
                 <strong>Your rating: {saved_rating}/5</strong>
             </div>
@@ -974,6 +974,12 @@ def dashboard_home(rated: str | None = None) -> str:
                     outline: none;
                 }}
 
+                .rating-button:disabled {{
+                    cursor: wait;
+                    opacity: 0.62;
+                    transform: none;
+                }}
+
                 .saved-feedback {{
                     display: grid;
                     gap: 6px;
@@ -1145,6 +1151,10 @@ def dashboard_home(rated: str | None = None) -> str:
                     </aside>
                 </header>
                 {success_banner_html}
+                <section class="success-banner feedback-toast" data-feedback-toast role="status" hidden>
+                    <span class="success-dot" aria-hidden="true"></span>
+                    <p>Feedback saved. SignalOS is learning your preferences.</p>
+                </section>
                 {weekly_report_html}
                 <section class="section-heading" aria-label="Daily Signals">
                     <div>
@@ -1166,6 +1176,84 @@ def dashboard_home(rated: str | None = None) -> str:
                     <strong>Average score {average_score}</strong>
                 </footer>
             </main>
+            <script>
+                (() => {{
+                    const feedbackForms = document.querySelectorAll("[data-feedback-form]");
+                    const feedbackToast = document.querySelector("[data-feedback-toast]");
+                    let toastTimer;
+
+                    const showFeedbackToast = () => {{
+                        if (!feedbackToast) {{
+                            return;
+                        }}
+
+                        feedbackToast.hidden = false;
+                        window.clearTimeout(toastTimer);
+                        toastTimer = window.setTimeout(() => {{
+                            feedbackToast.hidden = true;
+                        }}, 4000);
+                    }};
+
+                    const createSavedFeedback = (rating) => {{
+                        const savedFeedback = document.createElement("div");
+                        savedFeedback.className = "saved-feedback";
+                        savedFeedback.dataset.feedbackRegion = "";
+                        savedFeedback.setAttribute("aria-label", "Saved article feedback");
+
+                        const savedKicker = document.createElement("span");
+                        savedKicker.className = "saved-kicker";
+                        savedKicker.textContent = "Feedback saved";
+
+                        const savedRating = document.createElement("strong");
+                        savedRating.textContent = `Your rating: ${{rating}}/5`;
+
+                        savedFeedback.append(savedKicker, savedRating);
+                        return savedFeedback;
+                    }};
+
+                    const submitFeedback = async (event) => {{
+                        event.preventDefault();
+
+                        const form = event.currentTarget;
+                        const feedbackRegion = form.closest("[data-feedback-region]");
+                        const formData = new FormData(form);
+                        const rating = formData.get("rating");
+
+                        if (!feedbackRegion || typeof rating !== "string") {{
+                            form.submit();
+                            return;
+                        }}
+
+                        const ratingButtons = feedbackRegion.querySelectorAll(".rating-button");
+                        ratingButtons.forEach((button) => {{
+                            button.disabled = true;
+                        }});
+
+                        try {{
+                            const response = await fetch(form.action, {{
+                                method: form.method.toUpperCase(),
+                                headers: {{
+                                    "Content-Type": "application/x-www-form-urlencoded",
+                                }},
+                                body: new URLSearchParams(formData),
+                            }});
+
+                            if (!response.ok) {{
+                                throw new Error("Feedback request failed");
+                            }}
+
+                            feedbackRegion.replaceWith(createSavedFeedback(rating));
+                            showFeedbackToast();
+                        }} catch (error) {{
+                            form.submit();
+                        }}
+                    }};
+
+                    feedbackForms.forEach((form) => {{
+                        form.addEventListener("submit", submitFeedback);
+                    }});
+                }})();
+            </script>
         </body>
     </html>
     """
