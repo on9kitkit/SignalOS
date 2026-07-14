@@ -35,6 +35,19 @@ def _split_message(message: str, max_length: int = DISCORD_MESSAGE_LIMIT) -> lis
     return chunks
 
 
+def _delivery_failure_message(error: requests.RequestException) -> str:
+    if error.response is not None:
+        return f"Discord delivery failed with HTTP status {error.response.status_code}"
+
+    if isinstance(error, requests.Timeout):
+        return "Discord delivery failed: timeout"
+
+    if isinstance(error, requests.ConnectionError):
+        return "Discord delivery failed: connection error"
+
+    return "Discord delivery failed: request error"
+
+
 def send_to_discord(message: str) -> None:
     webhook_url = os.getenv("DISCORD_WEBHOOK_URL")
 
@@ -51,13 +64,15 @@ def send_to_discord(message: str) -> None:
         else:
             content = chunk
 
-        response = requests.post(
-            webhook_url,
-            json={"content": content},
-            timeout=15,
-        )
-
-        response.raise_for_status()
+        try:
+            response = requests.post(
+                webhook_url,
+                json={"content": content},
+                timeout=15,
+            )
+            response.raise_for_status()
+        except requests.RequestException as error:
+            raise RuntimeError(_delivery_failure_message(error)) from None
 
         if index < len(chunks):
             time.sleep(DISCORD_RATE_LIMIT_DELAY_SECONDS)
