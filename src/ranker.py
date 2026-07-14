@@ -4,7 +4,7 @@ from typing import Any
 
 from openai import OpenAI
 
-from src.config import SIGNALOS_RANKER_MODEL, USER_PROFILE
+from src.config import USER_PROFILE, get_ranker_model
 from src.models import Article, RankedArticle
 
 
@@ -127,6 +127,7 @@ def rank_articles(articles: list[Article], top_n: int = 3) -> list[RankedArticle
     if not articles:
         return []
 
+    model_name = get_ranker_model()
     client = _get_openai_client()
     formatted_articles = _format_articles_for_prompt(articles)
 
@@ -189,7 +190,7 @@ Articles:
 """.strip()
 
     response = client.responses.create(
-        model=SIGNALOS_RANKER_MODEL,
+        model=model_name,
         input=prompt,
     )
 

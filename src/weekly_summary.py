@@ -7,7 +7,7 @@ from typing import Any
 from dotenv import load_dotenv
 from openai import OpenAI
 
-from src.config import SIGNALOS_WEEKLY_MODEL
+from src.config import get_weekly_model
 from src.delivery import send_to_discord
 
 
@@ -97,6 +97,7 @@ def create_weekly_summary(article_history: list[dict[str, Any]]) -> str:
     if not article_history:
         raise RuntimeError("No recent article history available for weekly summary.")
 
+    model_name = get_weekly_model()
     client = _get_openai_client()
     formatted_history = _format_history_for_prompt(article_history)
 
@@ -134,7 +135,7 @@ Article history:
 """.strip()
 
     response = client.responses.create(
-        model=SIGNALOS_WEEKLY_MODEL,
+        model=model_name,
         input=prompt,
     )
 

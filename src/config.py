@@ -1,9 +1,23 @@
 import os
 
+from dotenv import load_dotenv
 
-# These models can be overridden in .env without changing Python code.
-SIGNALOS_RANKER_MODEL = os.getenv("SIGNALOS_RANKER_MODEL", "gpt-5.6-luna")
-SIGNALOS_WEEKLY_MODEL = os.getenv("SIGNALOS_WEEKLY_MODEL", "gpt-5.6-luna")
+
+DEFAULT_MODEL: str = "gpt-5.6-luna"
+
+
+def _get_model(setting_name: str) -> str:
+    # Resolve models lazily so configuration is loaded before each lookup.
+    load_dotenv()
+    return os.getenv(setting_name, DEFAULT_MODEL)
+
+
+def get_ranker_model() -> str:
+    return _get_model("SIGNALOS_RANKER_MODEL")
+
+
+def get_weekly_model() -> str:
+    return _get_model("SIGNALOS_WEEKLY_MODEL")
 
 
 USER_PROFILE = """
