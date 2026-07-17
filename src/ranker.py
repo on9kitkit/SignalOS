@@ -8,6 +8,10 @@ from src.config import USER_PROFILE, get_ranker_model
 from src.models import Article, RankedArticle
 
 
+MAX_ARTICLE_SUMMARY_CHARS = 350
+MAX_RANKER_OUTPUT_TOKENS = 4_000
+
+
 def _get_openai_client() -> OpenAI:
     api_key = os.getenv("OPENAI_API_KEY")
 
@@ -19,20 +23,29 @@ def _get_openai_client() -> OpenAI:
     return OpenAI(api_key=api_key)
 
 
+def _normalise_prompt_text(value: str) -> str:
+    return " ".join(value.split())
+
+
 def _format_articles_for_prompt(articles: list[Article]) -> str:
     article_payload = [
         {
             "article_index": index,
-            "title": article.title,
-            "source": article.source,
-            "published": article.published,
-            "summary": article.summary[:700],
-            "url": article.url,
+            "title": _normalise_prompt_text(article.title),
+            "source": _normalise_prompt_text(article.source),
+            "published": _normalise_prompt_text(article.published),
+            "summary": _normalise_prompt_text(article.summary)[
+                :MAX_ARTICLE_SUMMARY_CHARS
+            ],
         }
         for index, article in enumerate(articles)
     ]
 
-    return json.dumps(article_payload, ensure_ascii=False, indent=2)
+    return json.dumps(
+        article_payload,
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
 
 
 def _extract_ranker_payload(raw_text: str) -> list[dict[str, Any]]:
@@ -192,6 +205,7 @@ Articles:
     response = client.responses.create(
         model=model_name,
         input=prompt,
+        max_output_tokens=MAX_RANKER_OUTPUT_TOKENS,
     )
 
     payloads = _extract_ranker_payload(response.output_text)

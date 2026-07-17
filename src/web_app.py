@@ -1,12 +1,13 @@
 from datetime import datetime, timezone
 from html import escape
-import json
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs
 
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
+
+from src.state_store import locked_update_json_list, read_json_list
 
 
 STATE_DIR = Path(".signalos_state")
@@ -21,15 +22,7 @@ app = FastAPI(title="SignalOS Dashboard")
 
 
 def _load_article_history() -> list[dict[str, Any]]:
-    if not ARTICLE_HISTORY_PATH.exists():
-        return []
-
-    with ARTICLE_HISTORY_PATH.open("r", encoding="utf-8") as file:
-        data = json.load(file)
-
-    if not isinstance(data, list):
-        return []
-
+    data = read_json_list(ARTICLE_HISTORY_PATH)
     return [item for item in data if isinstance(item, dict)]
 
 
@@ -147,26 +140,8 @@ def _simple_markdown_to_html(markdown_text: str) -> str:
 
 
 def _load_feedback_entries() -> list[dict[str, Any]]:
-    if not FEEDBACK_PATH.exists():
-        return []
-
-    try:
-        with FEEDBACK_PATH.open("r", encoding="utf-8") as file:
-            data = json.load(file)
-    except (OSError, json.JSONDecodeError):
-        return []
-
-    if not isinstance(data, list):
-        return []
-
+    data = read_json_list(FEEDBACK_PATH)
     return [item for item in data if isinstance(item, dict)]
-
-
-def _write_feedback_entries(feedback_entries: list[dict[str, Any]]) -> None:
-    STATE_DIR.mkdir(parents=True, exist_ok=True)
-    with FEEDBACK_PATH.open("w", encoding="utf-8") as file:
-        json.dump(feedback_entries, file, indent=2)
-        file.write("\n")
 
 
 def _feedback_by_fingerprint(
@@ -183,38 +158,43 @@ def _feedback_by_fingerprint(
 
 
 def _save_feedback_entry(entry: dict[str, Any]) -> None:
-    feedback_entries = _load_feedback_entries()
-    fingerprint = str(entry["fingerprint"])
-    updated_entries: list[dict[str, Any]] = []
-    did_update = False
+    def upsert_feedback(current_items: list[Any]) -> list[Any]:
+        feedback_entries = [
+            item for item in current_items if isinstance(item, dict)
+        ]
+        fingerprint = str(entry["fingerprint"])
+        updated_entries: list[Any] = []
+        did_update = False
 
-    for existing_entry in feedback_entries:
-        if str(existing_entry.get("fingerprint", "")) != fingerprint:
-            updated_entries.append(existing_entry)
-            continue
+        for existing_entry in feedback_entries:
+            if str(existing_entry.get("fingerprint", "")) != fingerprint:
+                updated_entries.append(existing_entry)
+                continue
 
-        if did_update:
-            continue
+            if did_update:
+                continue
 
-        updated_entry = existing_entry.copy()
-        updated_entry.update({
-            "digest_date": entry["digest_date"],
-            "fingerprint": fingerprint,
-            "title": entry["title"],
-            "source": entry["source"],
-            "rating": entry["rating"],
-            "updated_at": entry["created_at"],
-        })
-        if not updated_entry.get("created_at"):
-            updated_entry["created_at"] = entry["created_at"]
+            updated_entry = existing_entry.copy()
+            updated_entry.update({
+                "digest_date": entry["digest_date"],
+                "fingerprint": fingerprint,
+                "title": entry["title"],
+                "source": entry["source"],
+                "rating": entry["rating"],
+                "updated_at": entry["created_at"],
+            })
+            if not updated_entry.get("created_at"):
+                updated_entry["created_at"] = entry["created_at"]
 
-        updated_entries.append(updated_entry)
-        did_update = True
+            updated_entries.append(updated_entry)
+            did_update = True
 
-    if not did_update:
-        updated_entries.append(entry)
+        if not did_update:
+            updated_entries.append(entry)
 
-    _write_feedback_entries(updated_entries)
+        return updated_entries
+
+    locked_update_json_list(FEEDBACK_PATH, upsert_feedback)
 
 
 def _find_article_by_fingerprint(
