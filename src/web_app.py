@@ -346,7 +346,7 @@ def dashboard_home(rated: str | None = None) -> str:
         success_banner_html = """
         <section class="success-banner" role="status">
             <span class="success-dot" aria-hidden="true"></span>
-            <p>Feedback saved. SignalOS is learning your preferences.</p>
+            <p>Feedback saved for future ranking improvements.</p>
         </section>
         """
 
@@ -1133,7 +1133,7 @@ def dashboard_home(rated: str | None = None) -> str:
                 {success_banner_html}
                 <section class="success-banner feedback-toast" data-feedback-toast role="status" hidden>
                     <span class="success-dot" aria-hidden="true"></span>
-                    <p>Feedback saved. SignalOS is learning your preferences.</p>
+                    <p>Feedback saved for future ranking improvements.</p>
                 </section>
                 {weekly_report_html}
                 <section class="section-heading" aria-label="Daily Signals">
