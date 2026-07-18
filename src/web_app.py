@@ -328,7 +328,7 @@ def dashboard_home(rated: str | None = None) -> str:
         weekly_report_name = _html_text(report_name, "Latest weekly report")
         weekly_report_content_html = _simple_markdown_to_html(report_content)
         weekly_report_html = f"""
-        <section class="weekly-panel" aria-label="Weekly Intelligence">
+        <section class="weekly-panel" data-weekly-panel aria-label="Weekly Intelligence">
             <div class="weekly-panel-header">
                 <div>
                     <p class="eyebrow">Weekly Intelligence</p>
@@ -336,9 +336,14 @@ def dashboard_home(rated: str | None = None) -> str:
                 </div>
                 <span class="weekly-report-badge">{weekly_report_name}</span>
             </div>
-            <div class="weekly-content">
-                {weekly_report_content_html}
+            <div class="weekly-content-frame" data-weekly-preview>
+                <div class="weekly-content" id="weekly-report-content" data-weekly-content>
+                    {weekly_report_content_html}
+                </div>
             </div>
+            <button class="weekly-toggle" type="button" data-weekly-toggle aria-controls="weekly-report-content" aria-expanded="true">
+                Collapse weekly report
+            </button>
         </section>
         """
     success_banner_html = ""
@@ -376,7 +381,7 @@ def dashboard_home(rated: str | None = None) -> str:
                         <form class="rating-form" method="post" action="/feedback" data-feedback-form>
                             <input type="hidden" name="fingerprint" value="{fingerprint}">
                             <input type="hidden" name="rating" value="{rating_value}">
-                            <button class="rating-button" type="submit" data-rating-value="{rating_value}" aria-label="Rate this article {rating_value} out of 5">
+                            <button class="rating-button" type="submit" data-rating-value="{rating_value}" aria-label="Rate this article {rating_value} out of 5" aria-pressed="false">
                                 {rating_value}
                             </button>
                         </form>
@@ -396,7 +401,7 @@ def dashboard_home(rated: str | None = None) -> str:
             """
 
         article_cards.append(f"""
-        <article class="{card_class}">
+        <article class="{card_class}" style="--card-order: {article_index - 1}">
             <div class="card-topline">
                 <div class="badge-row">
                     <span class="signal-badge">Signal {article_index}/{article_count}</span>
@@ -409,7 +414,7 @@ def dashboard_home(rated: str | None = None) -> str:
                 <p class="label">Why it matters</p>
                 <p>{reason}</p>
             </div>
-            <div class="card-section">
+            <div class="card-section card-section-action">
                 <p class="label">Action takeaway</p>
                 <p>{action_takeaway}</p>
             </div>
@@ -459,6 +464,10 @@ def dashboard_home(rated: str | None = None) -> str:
                     box-sizing: border-box;
                 }}
 
+                [hidden] {{
+                    display: none !important;
+                }}
+
                 body {{
                     min-height: 100vh;
                     margin: 0;
@@ -471,20 +480,22 @@ def dashboard_home(rated: str | None = None) -> str:
                 }}
 
                 main {{
-                    width: min(1220px, calc(100% - 40px));
+                    width: min(1160px, calc(100% - 36px));
                     margin: 0 auto;
-                    padding: 42px 0 40px;
+                    padding: 30px 0 28px;
                 }}
 
                 .page-header {{
                     display: grid;
+                    position: relative;
                     grid-template-columns: minmax(0, 1.35fr) minmax(300px, 0.65fr);
                     align-items: stretch;
-                    gap: 24px;
-                    margin-bottom: 22px;
-                    padding: 30px;
+                    gap: 20px;
+                    margin-bottom: 18px;
+                    padding: 26px;
+                    overflow: hidden;
                     border: 1px solid rgba(125, 211, 252, 0.18);
-                    border-radius: 18px;
+                    border-radius: 12px;
                     background:
                         linear-gradient(135deg, rgba(15, 23, 42, 0.9), rgba(8, 13, 24, 0.74)),
                         radial-gradient(circle at 16% 0%, rgba(125, 211, 252, 0.16), transparent 26rem);
@@ -492,9 +503,26 @@ def dashboard_home(rated: str | None = None) -> str:
                     backdrop-filter: blur(18px);
                 }}
 
+                .page-header::before {{
+                    content: "";
+                    position: absolute;
+                    width: 520px;
+                    height: 300px;
+                    top: -210px;
+                    left: 8%;
+                    border-radius: 50%;
+                    background: radial-gradient(circle, rgba(125, 211, 252, 0.24), transparent 68%);
+                    pointer-events: none;
+                }}
+
+                .page-header > * {{
+                    position: relative;
+                    z-index: 1;
+                }}
+
                 .hero-copy {{
                     display: flex;
-                    min-height: 220px;
+                    min-height: 184px;
                     flex-direction: column;
                     justify-content: center;
                 }}
@@ -510,7 +538,7 @@ def dashboard_home(rated: str | None = None) -> str:
 
                 h1 {{
                     margin: 0;
-                    font-size: clamp(2.2rem, 4vw, 4.1rem);
+                    font-size: 3.4rem;
                     line-height: 0.95;
                 }}
 
@@ -558,17 +586,25 @@ def dashboard_home(rated: str | None = None) -> str:
                     display: grid;
                     align-content: center;
                     min-height: 0;
-                    padding: 18px;
+                    padding: 16px;
                     border: 1px solid var(--line);
                     border-radius: 8px;
                     background: linear-gradient(135deg, rgba(7, 10, 18, 0.58), rgba(15, 23, 42, 0.38));
                     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+                    transition: transform 180ms ease, border-color 180ms ease, background 180ms ease, box-shadow 180ms ease;
+                }}
+
+                .hero-stat:hover {{
+                    transform: translateY(-2px);
+                    border-color: rgba(125, 211, 252, 0.34);
+                    background: linear-gradient(135deg, rgba(14, 165, 233, 0.1), rgba(15, 23, 42, 0.48));
+                    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 12px 28px rgba(0, 0, 0, 0.16);
                 }}
 
                 .stat-number {{
                     display: block;
                     color: #dffcff;
-                    font-size: 2.25rem;
+                    font-size: 2rem;
                     font-weight: 900;
                     line-height: 1;
                 }}
@@ -584,7 +620,7 @@ def dashboard_home(rated: str | None = None) -> str:
                     display: flex;
                     align-items: center;
                     gap: 12px;
-                    margin: 0 0 24px;
+                    margin: 0 0 18px;
                     padding: 14px 16px;
                     border: 1px solid rgba(167, 243, 208, 0.34);
                     border-radius: 8px;
@@ -603,15 +639,15 @@ def dashboard_home(rated: str | None = None) -> str:
 
                 .weekly-panel {{
                     display: grid;
-                    gap: 18px;
-                    margin: 0 0 30px;
-                    padding: 24px;
+                    gap: 14px;
+                    margin: 0 0 20px;
+                    padding: 19px;
                     border: 1px solid rgba(125, 211, 252, 0.18);
                     border-radius: 8px;
                     background:
-                        linear-gradient(135deg, rgba(14, 165, 233, 0.1), transparent 34%),
-                        rgba(12, 19, 34, 0.78);
-                    box-shadow: 0 18px 60px rgba(0, 0, 0, 0.22);
+                        linear-gradient(135deg, rgba(14, 165, 233, 0.07), transparent 32%),
+                        rgba(12, 19, 34, 0.68);
+                    box-shadow: 0 14px 42px rgba(0, 0, 0, 0.18);
                     backdrop-filter: blur(16px);
                 }}
 
@@ -624,7 +660,7 @@ def dashboard_home(rated: str | None = None) -> str:
 
                 .weekly-title {{
                     margin: 0;
-                    font-size: 1.5rem;
+                    font-size: 1.28rem;
                     line-height: 1.2;
                 }}
 
@@ -647,13 +683,70 @@ def dashboard_home(rated: str | None = None) -> str:
 
                 .weekly-content {{
                     display: grid;
-                    gap: 12px;
-                    max-height: 460px;
-                    overflow: auto;
-                    padding: 18px;
+                    gap: 10px;
+                    padding: 16px;
                     border: 1px solid rgba(148, 163, 184, 0.14);
                     border-radius: 8px;
                     background: rgba(7, 10, 18, 0.3);
+                }}
+
+                .weekly-content-frame {{
+                    position: relative;
+                    overflow: visible;
+                }}
+
+                .js .weekly-panel.is-collapsed .weekly-content-frame {{
+                    max-height: 190px;
+                    overflow: hidden;
+                }}
+
+                .js .weekly-panel.is-collapsed .weekly-content-frame::after {{
+                    content: "";
+                    position: absolute;
+                    right: 0;
+                    bottom: 0;
+                    left: 0;
+                    height: 74px;
+                    background: linear-gradient(transparent, rgba(9, 15, 27, 0.98));
+                    pointer-events: none;
+                }}
+
+                .weekly-toggle {{
+                    display: none;
+                    align-items: center;
+                    justify-content: center;
+                    width: fit-content;
+                    min-height: 38px;
+                    margin-left: auto;
+                    padding: 8px 13px;
+                    border: 1px solid rgba(125, 211, 252, 0.3);
+                    border-radius: 8px;
+                    background: rgba(14, 165, 233, 0.08);
+                    color: #dff6ff;
+                    font: inherit;
+                    font-size: 0.8rem;
+                    font-weight: 800;
+                    cursor: pointer;
+                    transition: transform 160ms ease, border-color 160ms ease, background 160ms ease;
+                }}
+
+                .js .weekly-toggle {{
+                    display: inline-flex;
+                }}
+
+                .weekly-toggle:hover {{
+                    transform: translateY(-1px);
+                    border-color: rgba(125, 211, 252, 0.56);
+                    background: rgba(14, 165, 233, 0.14);
+                }}
+
+                .weekly-toggle:active {{
+                    transform: translateY(0);
+                }}
+
+                .weekly-toggle:focus-visible {{
+                    outline: 2px solid #bae6fd;
+                    outline-offset: 3px;
                 }}
 
                 .weekly-content h3,
@@ -709,7 +802,7 @@ def dashboard_home(rated: str | None = None) -> str:
                     align-items: flex-end;
                     justify-content: space-between;
                     gap: 20px;
-                    margin: 28px 0 16px;
+                    margin: 20px 0 14px;
                 }}
 
                 .section-title {{
@@ -744,39 +837,62 @@ def dashboard_home(rated: str | None = None) -> str:
 
                 .article-grid {{
                     display: grid;
-                    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-                    gap: 20px;
+                    grid-template-columns: repeat(2, minmax(0, 1fr));
+                    align-items: start;
+                    gap: 16px;
                 }}
 
                 .article-card {{
                     display: flex;
                     position: relative;
-                    min-height: 380px;
                     flex-direction: column;
-                    gap: 20px;
-                    padding: 24px;
+                    gap: 14px;
+                    padding: 20px;
+                    isolation: isolate;
                     border: 1px solid var(--line);
                     border-radius: 8px;
                     background: var(--panel);
-                    box-shadow: 0 18px 60px rgba(0, 0, 0, 0.22);
+                    box-shadow: 0 14px 42px rgba(0, 0, 0, 0.2);
                     backdrop-filter: blur(16px);
                     overflow: hidden;
-                    transition: border-color 180ms ease, transform 180ms ease, background 180ms ease, box-shadow 180ms ease;
+                    animation: card-enter 420ms ease backwards;
+                    animation-delay: calc(var(--card-order) * 55ms);
+                    transition: border-color 180ms ease, transform 180ms ease, box-shadow 180ms ease;
                 }}
 
                 .article-card::before {{
                     content: "";
                     position: absolute;
                     inset: 0;
+                    z-index: -1;
                     border-top: 1px solid rgba(255, 255, 255, 0.05);
                     pointer-events: none;
                 }}
 
+                .article-card::after {{
+                    content: "";
+                    position: absolute;
+                    inset: 0;
+                    z-index: -1;
+                    background: linear-gradient(145deg, rgba(56, 189, 248, 0.08), transparent 42%, rgba(16, 185, 129, 0.04));
+                    opacity: 0;
+                    pointer-events: none;
+                    transition: opacity 180ms ease;
+                }}
+
+                .article-card > * {{
+                    position: relative;
+                    z-index: 1;
+                }}
+
                 .article-card:hover {{
-                    transform: translateY(-5px);
+                    transform: translateY(-3px);
                     border-color: rgba(125, 211, 252, 0.46);
-                    background: var(--panel-strong);
-                    box-shadow: 0 28px 80px rgba(0, 0, 0, 0.34);
+                    box-shadow: 0 22px 54px rgba(0, 0, 0, 0.3), 0 0 24px rgba(56, 189, 248, 0.06);
+                }}
+
+                .article-card:hover::after {{
+                    opacity: 1;
                 }}
 
                 .article-card-featured {{
@@ -857,15 +973,26 @@ def dashboard_home(rated: str | None = None) -> str:
                 }}
 
                 .card-section {{
-                    padding-top: 4px;
+                    padding-top: 2px;
+                }}
+
+                .card-section-action {{
+                    padding: 11px 12px;
+                    border-left: 2px solid rgba(167, 243, 208, 0.5);
+                    border-radius: 0 6px 6px 0;
+                    background: linear-gradient(90deg, rgba(16, 185, 129, 0.09), rgba(16, 185, 129, 0.02));
+                }}
+
+                .card-section-action .label {{
+                    color: var(--signal);
                 }}
 
                 .label {{
-                    margin: 0 0 6px;
+                    margin: 0 0 5px;
                     color: var(--accent);
-                    font-size: 0.72rem;
+                    font-size: 0.68rem;
                     font-weight: 900;
-                    letter-spacing: 0.12em;
+                    letter-spacing: 0.14em;
                     text-transform: uppercase;
                 }}
 
@@ -880,40 +1007,58 @@ def dashboard_home(rated: str | None = None) -> str:
                     align-items: center;
                     justify-content: center;
                     width: fit-content;
-                    min-height: 40px;
-                    padding: 10px 15px;
-                    border: 1px solid rgba(125, 211, 252, 0.34);
+                    min-height: 42px;
+                    padding: 10px 14px;
+                    border: 1px solid rgba(125, 211, 252, 0.52);
                     border-radius: 8px;
-                    background: linear-gradient(135deg, rgba(56, 189, 248, 0.22), rgba(167, 243, 208, 0.12));
+                    background: linear-gradient(135deg, rgba(56, 189, 248, 0.26), rgba(16, 185, 129, 0.14));
                     color: var(--text);
                     font-size: 0.9rem;
                     font-weight: 850;
                     text-decoration: none;
-                    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+                    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 8px 18px rgba(8, 145, 178, 0.08);
                     transition: border-color 180ms ease, transform 180ms ease, background 180ms ease, box-shadow 180ms ease;
+                }}
+
+                .article-link::after {{
+                    content: "\\2197";
+                    margin-left: 8px;
+                    font-size: 0.9em;
                 }}
 
                 .article-link:hover {{
                     transform: translateY(-2px);
-                    border-color: rgba(167, 243, 208, 0.58);
+                    border-color: rgba(167, 243, 208, 0.7);
                     background: linear-gradient(135deg, rgba(56, 189, 248, 0.32), rgba(167, 243, 208, 0.2));
-                    box-shadow: 0 10px 24px rgba(8, 145, 178, 0.14);
+                    box-shadow: 0 12px 28px rgba(8, 145, 178, 0.18);
+                }}
+
+                .article-link:active {{
+                    transform: translateY(0);
+                    box-shadow: inset 0 1px 6px rgba(0, 0, 0, 0.2);
+                }}
+
+                .article-link:focus-visible {{
+                    outline: 2px solid #bae6fd;
+                    outline-offset: 3px;
                 }}
 
                 .card-actions {{
                     display: flex;
                     align-items: flex-end;
                     justify-content: space-between;
-                    gap: 16px;
-                    margin-top: auto;
+                    gap: 12px;
+                    margin-top: 2px;
+                    padding-top: 14px;
+                    border-top: 1px solid rgba(148, 163, 184, 0.12);
                     flex-wrap: wrap;
                 }}
 
                 .feedback-panel {{
                     display: grid;
-                    gap: 10px;
-                    min-width: 224px;
-                    padding: 13px;
+                    gap: 8px;
+                    min-width: 232px;
+                    padding: 11px;
                     border: 1px solid rgba(125, 211, 252, 0.18);
                     border-radius: 8px;
                     background: linear-gradient(135deg, rgba(7, 10, 18, 0.42), rgba(15, 23, 42, 0.28));
@@ -943,28 +1088,47 @@ def dashboard_home(rated: str | None = None) -> str:
                     font-size: 0.82rem;
                     font-weight: 900;
                     cursor: pointer;
-                    transition: border-color 180ms ease, transform 180ms ease, background 180ms ease;
+                    transition: border-color 160ms ease, transform 160ms ease, background 160ms ease, color 160ms ease, box-shadow 160ms ease;
                 }}
 
-                .rating-button:hover,
-                .rating-button:focus-visible {{
+                .rating-button:hover {{
                     transform: translateY(-2px);
                     border-color: rgba(167, 243, 208, 0.64);
                     background: rgba(167, 243, 208, 0.18);
-                    outline: none;
+                }}
+
+                .rating-button:active {{
+                    transform: translateY(0);
+                }}
+
+                .rating-button:focus-visible {{
+                    outline: 2px solid #a7f3d0;
+                    outline-offset: 3px;
+                }}
+
+                .rating-button.is-selected,
+                .rating-button[aria-pressed="true"] {{
+                    border-color: rgba(167, 243, 208, 0.86);
+                    background: var(--signal);
+                    color: #06271d;
+                    box-shadow: 0 0 0 3px rgba(167, 243, 208, 0.14), 0 8px 18px rgba(16, 185, 129, 0.18);
                 }}
 
                 .rating-button:disabled {{
                     cursor: wait;
-                    opacity: 0.62;
+                    opacity: 0.48;
                     transform: none;
+                }}
+
+                .rating-button.is-selected:disabled {{
+                    opacity: 1;
                 }}
 
                 .saved-feedback {{
                     display: grid;
                     gap: 6px;
-                    min-width: 224px;
-                    padding: 14px 15px;
+                    min-width: 210px;
+                    padding: 12px 14px;
                     border: 1px solid rgba(167, 243, 208, 0.46);
                     border-radius: 8px;
                     background:
@@ -998,36 +1162,77 @@ def dashboard_home(rated: str | None = None) -> str:
                 }}
 
                 .dashboard-footer {{
-                    display: flex;
+                    display: grid;
+                    grid-template-columns: auto repeat(3, auto);
                     align-items: center;
                     justify-content: center;
-                    gap: 12px;
-                    flex-wrap: wrap;
-                    margin-top: 28px;
-                    padding: 16px;
-                    border: 1px solid rgba(148, 163, 184, 0.14);
+                    gap: 8px;
+                    margin-top: 20px;
+                    padding: 10px 12px;
+                    border-top: 1px solid rgba(148, 163, 184, 0.13);
                     border-radius: 8px;
-                    background: rgba(7, 10, 18, 0.24);
+                    background: rgba(7, 10, 18, 0.16);
                     color: var(--muted);
-                    font-size: 0.84rem;
+                    font-size: 0.78rem;
                 }}
 
-                .dashboard-footer span {{
-                    color: var(--accent);
+                .footer-label {{
+                    margin-right: 4px;
+                    color: var(--muted);
                     font-weight: 900;
-                    letter-spacing: 0.08em;
+                    letter-spacing: 0.1em;
                     text-transform: uppercase;
                 }}
 
-                .dashboard-footer strong {{
+                .footer-stat {{
+                    display: inline-flex;
+                    align-items: baseline;
+                    gap: 5px;
+                    padding: 6px 9px;
+                    border: 1px solid rgba(148, 163, 184, 0.12);
+                    border-radius: 6px;
+                    background: rgba(15, 23, 42, 0.26);
+                    color: var(--muted);
+                }}
+
+                .footer-stat strong {{
                     color: #dbeafe;
+                    font-size: 0.86rem;
                     font-weight: 800;
                 }}
 
-                @media (min-width: 940px) {{
-                    .article-card-featured {{
-                        grid-column: span 2;
-                        min-height: 340px;
+                .feedback-toast {{
+                    position: fixed;
+                    top: 18px;
+                    right: 18px;
+                    z-index: 20;
+                    width: min(390px, calc(100% - 36px));
+                    margin: 0;
+                    box-shadow: 0 20px 54px rgba(0, 0, 0, 0.38);
+                    animation: toast-enter 220ms ease both;
+                }}
+
+                @keyframes card-enter {{
+                    from {{
+                        opacity: 0;
+                        transform: translateY(6px);
+                    }}
+
+                    to {{
+                        opacity: 1;
+                        transform: translateY(0);
+                    }}
+                }}
+
+                @keyframes toast-enter {{
+                    from {{
+                        opacity: 0;
+                        transform: translateY(-6px);
+                    }}
+
+                    to {{
+                        opacity: 1;
+                        transform: translateY(0);
                     }}
                 }}
 
@@ -1042,6 +1247,12 @@ def dashboard_home(rated: str | None = None) -> str:
 
                     .hero-stats {{
                         grid-template-columns: repeat(3, minmax(0, 1fr));
+                    }}
+                }}
+
+                @media (max-width: 840px) {{
+                    .article-grid {{
+                        grid-template-columns: 1fr;
                     }}
                 }}
 
@@ -1061,7 +1272,21 @@ def dashboard_home(rated: str | None = None) -> str:
                     }}
 
                     .hero-stats {{
-                        grid-template-columns: 1fr;
+                        grid-template-columns: repeat(3, minmax(0, 1fr));
+                    }}
+
+                    .hero-stat {{
+                        min-height: 92px;
+                        padding: 12px;
+                    }}
+
+                    .stat-number {{
+                        font-size: 1.55rem;
+                    }}
+
+                    .stat-label {{
+                        font-size: 0.72rem;
+                        line-height: 1.3;
                     }}
 
                     .weekly-panel-header {{
@@ -1086,10 +1311,6 @@ def dashboard_home(rated: str | None = None) -> str:
                         grid-template-columns: 1fr;
                     }}
 
-                    .article-card {{
-                        min-height: auto;
-                    }}
-
                     .card-actions {{
                         align-items: stretch;
                         flex-direction: column;
@@ -1099,6 +1320,36 @@ def dashboard_home(rated: str | None = None) -> str:
                     .feedback-panel,
                     .saved-feedback {{
                         width: 100%;
+                    }}
+
+                    .weekly-toggle {{
+                        width: 100%;
+                    }}
+
+                    .dashboard-footer {{
+                        grid-template-columns: repeat(3, minmax(0, 1fr));
+                        justify-items: stretch;
+                    }}
+
+                    .footer-label {{
+                        grid-column: 1 / -1;
+                        margin: 0;
+                        text-align: center;
+                    }}
+
+                    .footer-stat {{
+                        justify-content: center;
+                    }}
+                }}
+
+                @media (prefers-reduced-motion: reduce) {{
+                    *,
+                    *::before,
+                    *::after {{
+                        scroll-behavior: auto !important;
+                        animation-duration: 0.01ms !important;
+                        animation-iteration-count: 1 !important;
+                        transition-duration: 0.01ms !important;
                     }}
                 }}
             </style>
@@ -1112,7 +1363,7 @@ def dashboard_home(rated: str | None = None) -> str:
                         <p class="subtitle">Latest strategic signals from article history, ranked into a clean briefing surface.</p>
                         <div class="header-meta">
                             <span class="meta-pill">Latest digest: {latest_digest_date}</span>
-                            <span class="meta-pill meta-pill-soft">Feedback status: {feedback_status}</span>
+                            <span class="meta-pill meta-pill-soft">Feedback status:&nbsp;<span data-feedback-status data-article-count="{article_count}">{feedback_status}</span></span>
                         </div>
                     </div>
                     <aside class="hero-stats" aria-label="Dashboard stats">
@@ -1121,7 +1372,7 @@ def dashboard_home(rated: str | None = None) -> str:
                             <span class="stat-label">signals shown</span>
                         </div>
                         <div class="hero-stat">
-                            <span class="stat-number">{rated_count}</span>
+                            <span class="stat-number" data-rated-count>{rated_count}</span>
                             <span class="stat-label">rated signals</span>
                         </div>
                         <div class="hero-stat">
@@ -1143,24 +1394,55 @@ def dashboard_home(rated: str | None = None) -> str:
                     </div>
                     <div class="feedback-status">
                         <span>Feedback status</span>
-                        <strong>{feedback_status}</strong>
+                        <strong data-feedback-status data-article-count="{article_count}">{feedback_status}</strong>
                     </div>
                 </section>
                 <section class="article-grid" aria-label="Latest articles">
                     {article_cards_html}
                 </section>
                 <footer class="dashboard-footer" aria-label="Dashboard status">
-                    <span>SignalOS status</span>
-                    <strong>{article_count} signals shown</strong>
-                    <strong>{rated_count} rated</strong>
-                    <strong>Average score {average_score}</strong>
+                    <span class="footer-label">Current brief</span>
+                    <span class="footer-stat"><strong>{article_count}</strong> signals</span>
+                    <span class="footer-stat"><strong data-rated-count>{rated_count}</strong> rated</span>
+                    <span class="footer-stat"><strong>{average_score}</strong> avg score</span>
                 </footer>
             </main>
             <script>
                 (() => {{
+                    document.documentElement.classList.add("js");
+
                     const feedbackForms = document.querySelectorAll("[data-feedback-form]");
                     const feedbackToast = document.querySelector("[data-feedback-toast]");
+                    const weeklyPanel = document.querySelector("[data-weekly-panel]");
+                    const weeklyPreview = document.querySelector("[data-weekly-preview]");
+                    const weeklyToggle = document.querySelector("[data-weekly-toggle]");
                     let toastTimer;
+
+                    const setWeeklyExpanded = (isExpanded) => {{
+                        if (!weeklyPanel || !weeklyToggle) {{
+                            return;
+                        }}
+
+                        weeklyPanel.classList.toggle("is-collapsed", !isExpanded);
+                        weeklyToggle.setAttribute("aria-expanded", String(isExpanded));
+                        weeklyToggle.textContent = isExpanded
+                            ? "Collapse weekly report"
+                            : "Expand weekly report";
+                    }};
+
+                    if (weeklyPanel && weeklyPreview && weeklyToggle) {{
+                        setWeeklyExpanded(false);
+
+                        if (weeklyPreview.scrollHeight <= weeklyPreview.clientHeight + 1) {{
+                            setWeeklyExpanded(true);
+                            weeklyToggle.hidden = true;
+                        }} else {{
+                            weeklyToggle.addEventListener("click", () => {{
+                                const isExpanded = weeklyToggle.getAttribute("aria-expanded") === "true";
+                                setWeeklyExpanded(!isExpanded);
+                            }});
+                        }}
+                    }}
 
                     const showFeedbackToast = () => {{
                         if (!feedbackToast) {{
@@ -1191,6 +1473,28 @@ def dashboard_home(rated: str | None = None) -> str:
                         return savedFeedback;
                     }};
 
+                    const updateFeedbackSummary = () => {{
+                        const ratedCounters = document.querySelectorAll("[data-rated-count]");
+                        const feedbackStatuses = document.querySelectorAll("[data-feedback-status]");
+                        const currentRated = Number.parseInt(ratedCounters[0]?.textContent || "0", 10);
+                        const articleCount = Number.parseInt(
+                            feedbackStatuses[0]?.dataset.articleCount || "0",
+                            10,
+                        );
+                        const nextRated = articleCount
+                            ? Math.min(currentRated + 1, articleCount)
+                            : currentRated + 1;
+
+                        ratedCounters.forEach((counter) => {{
+                            counter.textContent = String(nextRated);
+                        }});
+                        feedbackStatuses.forEach((status) => {{
+                            status.textContent = articleCount
+                                ? `${{nextRated}}/${{articleCount}} rated`
+                                : `${{nextRated}} rated`;
+                        }});
+                    }};
+
                     const submitFeedback = async (event) => {{
                         event.preventDefault();
 
@@ -1205,7 +1509,11 @@ def dashboard_home(rated: str | None = None) -> str:
                         }}
 
                         const ratingButtons = feedbackRegion.querySelectorAll(".rating-button");
+                        const selectedButton = form.querySelector("[data-rating-value]");
                         ratingButtons.forEach((button) => {{
+                            const isSelected = button === selectedButton;
+                            button.classList.toggle("is-selected", isSelected);
+                            button.setAttribute("aria-pressed", String(isSelected));
                             button.disabled = true;
                         }});
 
@@ -1223,8 +1531,9 @@ def dashboard_home(rated: str | None = None) -> str:
                             }}
 
                             feedbackRegion.replaceWith(createSavedFeedback(rating));
+                            updateFeedbackSummary();
                             showFeedbackToast();
-                        }} catch (error) {{
+                        }} catch {{
                             form.submit();
                         }}
                     }};
