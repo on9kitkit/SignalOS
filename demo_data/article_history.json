@@ -1,0 +1,62 @@
+[
+  {
+    "digest_date": "2026-07-18",
+    "fingerprint": "demo-local-ai-apple-silicon-001",
+    "title": "Demo: On-device AI compilation cuts local model latency on Apple Silicon",
+    "url": "https://example.com/signals/apple-silicon-local-ai",
+    "source": "SignalOS Demo Lab",
+    "published": "2026-07-18T07:00:00+00:00",
+    "summary": "A synthetic benchmark shows how compiler-aware quantisation could improve private, on-device inference for student and indie-builder workflows.",
+    "relevance_score": 9,
+    "quality_score": 9,
+    "importance_score": 8,
+    "final_score": 8.8,
+    "reason": "Local inference improvements directly affect the cost, privacy, and responsiveness of AI products built for Apple Silicon.",
+    "action_takeaway": "Benchmark one small model with MLX using two quantisation levels, then record latency, memory use, and output quality before choosing a production configuration."
+  },
+  {
+    "digest_date": "2026-07-18",
+    "fingerprint": "demo-education-technology-002",
+    "title": "Demo: Collaborative revision tools outperform passive study feeds in pilot classrooms",
+    "url": "https://example.com/signals/collaborative-revision",
+    "source": "SignalOS Education Review",
+    "published": "2026-07-18T06:30:00+00:00",
+    "summary": "A synthetic classroom pilot suggests that structured peer explanation and shared progress loops can improve engagement more than passive content recommendations.",
+    "relevance_score": 10,
+    "quality_score": 8,
+    "importance_score": 9,
+    "final_score": 9.2,
+    "reason": "The result supports a multiplayer revision product built around active collaboration rather than another isolated question bank.",
+    "action_takeaway": "Prototype one live peer-explanation loop and measure whether students return voluntarily across a seven-day test."
+  },
+  {
+    "digest_date": "2026-07-18",
+    "fingerprint": "demo-developer-tooling-003",
+    "title": "Demo: Typed agent traces make AI-assisted debugging easier to verify",
+    "url": "https://example.com/signals/typed-agent-traces",
+    "source": "SignalOS Developer Brief",
+    "published": "2026-07-17T18:00:00+00:00",
+    "summary": "A synthetic developer-tool release demonstrates structured execution traces that connect agent decisions to files, tests, and resulting changes.",
+    "relevance_score": 9,
+    "quality_score": 8,
+    "importance_score": 8,
+    "final_score": 8.5,
+    "reason": "Traceable agent work reduces review time and makes AI-driven development safer for fast-moving solo projects.",
+    "action_takeaway": "Add a compact run manifest to one automation that records inputs, changed files, validation commands, and final status."
+  },
+  {
+    "digest_date": "2026-07-18",
+    "fingerprint": "demo-ai-business-strategy-004",
+    "title": "Demo: Falling inference costs shift AI advantage from model access to workflow ownership",
+    "url": "https://example.com/signals/ai-workflow-economics",
+    "source": "SignalOS Strategy Desk",
+    "published": "2026-07-17T15:00:00+00:00",
+    "summary": "A synthetic market analysis argues that cheaper models increase the value of proprietary workflows, user feedback, and distribution rather than generic AI access.",
+    "relevance_score": 9,
+    "quality_score": 9,
+    "importance_score": 10,
+    "final_score": 9.3,
+    "reason": "As model access commoditises, durable product value moves toward trusted niches, accumulated preference data, and repeatable user outcomes.",
+    "action_takeaway": "Track retention and feedback quality before adding features, then use the strongest repeated user need as the product wedge."
+  }
+]

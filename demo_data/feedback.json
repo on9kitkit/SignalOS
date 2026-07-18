@@ -1,0 +1,18 @@
+[
+  {
+    "created_at": "2026-07-18T08:15:00+00:00",
+    "digest_date": "2026-07-18",
+    "fingerprint": "demo-local-ai-apple-silicon-001",
+    "title": "Demo: On-device AI compilation cuts local model latency on Apple Silicon",
+    "source": "SignalOS Demo Lab",
+    "rating": 5
+  },
+  {
+    "created_at": "2026-07-18T08:16:00+00:00",
+    "digest_date": "2026-07-18",
+    "fingerprint": "demo-ai-business-strategy-004",
+    "title": "Demo: Falling inference costs shift AI advantage from model access to workflow ownership",
+    "source": "SignalOS Strategy Desk",
+    "rating": 4
+  }
+]

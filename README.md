@@ -2,9 +2,11 @@
 
 # SignalOS
 
-SignalOS is an autonomous AI intelligence agent that collects high-signal AI, technology, and builder-relevant news, ranks it using an LLM, filters stale or repeated stories, and delivers a concise daily digest to Discord.
+SignalOS is a personal intelligence system that collects high-signal AI, technology, business, and education news, filters and ranks it using GPT, and turns it into four actionable daily signals.
 
-The goal is not to create another generic news summariser. SignalOS is designed as a personalised intelligence layer for student-builders, programmers, and early-stage founders who want to know which developments actually matter for their projects, skills, and opportunities.
+The signals are delivered through Discord and displayed in a FastAPI dashboard with feedback controls, persistent article history, and weekly intelligence reports.
+
+The goal is not to create another generic news summariser. SignalOS is designed for student-builders, programmers, and early-stage founders who need to know which developments actually matter for their projects, skills, and opportunities.
 
 ## What it does
 
@@ -12,36 +14,51 @@ SignalOS runs automatically in the cloud and performs the full pipeline:
 
 ```text
 RSS feeds
-→ article collection
+→ article normalisation
 → freshness filtering
-→ repeat prevention
-→ GPT-based ranking
-→ source diversity filtering
-→ Markdown digest generation
+→ deduplication
+→ source-balanced candidate selection
+→ GPT strategic ranking
+→ four actionable signals
 → Discord delivery
+→ FastAPI dashboard
+→ feedback and weekly intelligence
 ```
 
 ## Current features
 
-- Fetches articles from selected AI and technology RSS feeds
-- Uses an OpenAI model to rank articles by relevance, quality, and importance
-- Filters for fresh articles from the last few days
-- Prevents repeated articles across different runs using article fingerprints
-- Applies source diversity so the digest is not dominated by one publication
-- Generates a clean Markdown digest
-- Sends the digest to Discord using a webhook
-- Runs automatically using GitHub Actions
-- Stores lightweight seen-article memory using GitHub Actions cache
+- Fetches articles from selected AI, technology, business, and education RSS feeds
+- Filters stale articles and previously seen stories
+- Deduplicates articles using stable fingerprints and normalised metadata
+- Applies source-balanced candidate preselection
+- Caps ranking input to control API cost
+- Uses GPT to rank articles by relevance, quality, importance, and actionability
+- Maps model-returned indexes back to original trusted article objects
+- Produces four daily strategic signals
+- Generates reasons and concrete action takeaways
+- Delivers signals through Discord
+- Displays intelligence in a FastAPI dashboard
+- Stores article feedback
+- Generates weekly intelligence reports
+- Uses atomic JSON writes, locking, backups, and corruption detection
+- Runs daily and weekly workflows with GitHub Actions
+- Includes a deterministic no-secrets Demo Mode for reviewers
 
 ## Tech stack
 
 - Python 3.11+
+- FastAPI
+- Uvicorn
 - OpenAI API
+- GPT-5.6
 - RSS feeds via `feedparser`
 - Discord webhooks
+- Vanilla JavaScript
+- HTML and CSS
 - GitHub Actions
-- GitHub Actions cache
-- Markdown output
+- JSON state storage
+- File locking and atomic writes
+- Markdown reporting
 
 ## Project structure
 
@@ -49,7 +66,14 @@ RSS feeds
 SignalOS/
 ├── .github/
 │   └── workflows/
-│       └── morning.yml
+│       ├── morning.yml
+│       └── weekly.yml
+├── demo_data/
+│   ├── article_history.json
+│   ├── feedback.json
+│   └── weekly_report.md
+├── scripts/
+│   └── load_demo_data.py
 ├── src/
 │   ├── config.py
 │   ├── delivery.py
@@ -57,7 +81,10 @@ SignalOS/
 │   ├── main.py
 │   ├── models.py
 │   ├── news_fetcher.py
-│   └── ranker.py
+│   ├── ranker.py
+│   ├── state_store.py
+│   ├── web_app.py
+│   └── weekly_summary.py
 ├── .env.example
 ├── .gitignore
 ├── README.md
@@ -94,6 +121,28 @@ The selected articles are formatted into a Markdown digest with reasoning and ac
 ### 6. Discord delivery
 
 The digest is sent to Discord using a webhook. Long digests are split into multiple Discord-safe chunks instead of being silently cut off.
+
+## Demo Mode
+
+Demo Mode gives reviewers and OpenAI Build Week judges a deterministic SignalOS dashboard without requiring API keys, Discord credentials, RSS fetching, or paid model calls. It uses clearly synthetic sample articles, feedback, and a weekly report; it does not run the daily pipeline.
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+python3 scripts/load_demo_data.py
+uvicorn src.web_app:app --reload
+```
+
+Then open `http://127.0.0.1:8000` in a browser. The dashboard will show four demo signals, two existing ratings, two unrated signals for testing the feedback controls, and a weekly intelligence report.
+
+The loader refuses to overwrite existing runtime files. To intentionally replace them with the synthetic fixtures, run:
+
+```bash
+python3 scripts/load_demo_data.py --force
+```
+
+Demo Mode makes no network or API calls, needs no secrets, and is intended only as a safe reviewer experience.
 
 ## Setup
 
@@ -176,18 +225,40 @@ digests/
 .signalos_state/
 ```
 
+## OpenAI Build Week development
+
+SignalOS existed before OpenAI Build Week as an early command-line and Discord intelligence prototype.
+
+During Build Week, it was meaningfully extended with:
+
+- a FastAPI intelligence dashboard
+- weekly intelligence reports
+- persistent article feedback
+- progressive-enhancement JavaScript interactions
+- source-balanced candidate preselection
+- ranking token and cost controls
+- configurable model selection
+- GitHub Actions concurrency safeguards
+- sanitised delivery failures
+- atomic and locked JSON state storage
+- a deterministic reviewer Demo Mode
+- repository-wide security and reliability auditing with Codex
+
+The dated Git history and Codex sessions document these additions.
+
 ## Roadmap
 
 Planned upgrades:
 
-- Add more high-quality RSS sources
-- Add stronger article deduplication using semantic similarity
-- Add weekly intelligence summaries
-- Add user feedback scoring
-- Add trend detection across multiple days
-- Add a lightweight web dashboard
-- Support multiple user profiles
-- Turn the engine into a micro-SaaS prototype
+- Use explicit feedback signals in future ranking
+- Add editable and undoable feedback
+- Add saved build ideas
+- Add dashboard search and filtering
+- Add trend detection across multiple weeks
+- Add semantic article similarity
+- Add authentication and database-backed multi-user storage
+- Benchmark local inference workflows on Apple Silicon
+- Turn SignalOS into a focused personal-intelligence SaaS
 
 ## Why this project exists
 
