@@ -191,6 +191,12 @@ python -m src.main
 
 If everything is configured correctly, SignalOS will print the digest locally and send it to Discord.
 
+## Tests
+
+```bash
+python3 -m pytest
+```
+
 ## GitHub Actions automation
 
 SignalOS is designed to run automatically through GitHub Actions.
