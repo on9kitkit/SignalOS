@@ -26,6 +26,27 @@ FEEDBACK_REQUIRED_FIELDS = frozenset({
     "source",
     "rating",
 })
+PROFILE_REQUIRED_FIELDS = frozenset({
+    "role",
+    "goals",
+    "active_projects",
+    "preferred_topics",
+    "excluded_topics",
+    "briefing_style",
+    "current_focus",
+})
+PROFILE_LIST_FIELDS = (
+    "goals",
+    "active_projects",
+    "preferred_topics",
+    "excluded_topics",
+)
+SUPPORTED_BRIEFING_STYLES = frozenset({
+    "concise",
+    "strategic",
+    "technical",
+    "opportunity-focused",
+})
 
 
 def _parse_arguments() -> argparse.Namespace:
@@ -62,6 +83,19 @@ def _load_json_list(path: Path, required_fields: frozenset[str]) -> list[dict[st
     return records
 
 
+def _load_json_object(path: Path) -> dict[str, Any]:
+    try:
+        with path.open("r", encoding="utf-8") as source_file:
+            value = json.load(source_file)
+    except (OSError, json.JSONDecodeError) as error:
+        raise RuntimeError(f"Cannot load demo fixture '{path.name}': {type(error).__name__}") from None
+
+    if not isinstance(value, dict):
+        raise RuntimeError(f"Demo fixture '{path.name}' must contain a JSON object.")
+
+    return value
+
+
 def _validate_fixtures(demo_data_directory: Path) -> None:
     articles = _load_json_list(
         demo_data_directory / "article_history.json",
@@ -71,6 +105,7 @@ def _validate_fixtures(demo_data_directory: Path) -> None:
         demo_data_directory / "feedback.json",
         FEEDBACK_REQUIRED_FIELDS,
     )
+    profile = _load_json_object(demo_data_directory / "profile.json")
 
     if len(articles) != 4:
         raise RuntimeError("Demo article history must contain exactly four records.")
@@ -83,6 +118,28 @@ def _validate_fixtures(demo_data_directory: Path) -> None:
         raise RuntimeError("Demo feedback refers to an unknown article fingerprint.")
     if len(article_fingerprints - feedback_fingerprints) < 2:
         raise RuntimeError("At least two demo articles must remain unrated.")
+
+    missing_profile_fields = PROFILE_REQUIRED_FIELDS.difference(profile)
+    if missing_profile_fields:
+        missing = ", ".join(sorted(missing_profile_fields))
+        raise RuntimeError(f"Demo profile is missing: {missing}.")
+    if not isinstance(profile["role"], str) or not profile["role"].strip():
+        raise RuntimeError("Demo profile role must be non-empty text.")
+    if not isinstance(profile["current_focus"], str):
+        raise RuntimeError("Demo profile current focus must be text.")
+    if (
+        not isinstance(profile["briefing_style"], str)
+        or profile["briefing_style"] not in SUPPORTED_BRIEFING_STYLES
+    ):
+        raise RuntimeError("Demo profile has an unsupported briefing style.")
+    for field_name in PROFILE_LIST_FIELDS:
+        field_value = profile[field_name]
+        if not isinstance(field_value, list) or not all(
+            isinstance(item, str) and item.strip() for item in field_value
+        ):
+            raise RuntimeError(
+                f"Demo profile {field_name} must be a list of non-empty strings."
+            )
 
 
 def _copy_demo_files(repository_root: Path, force: bool) -> list[Path]:
@@ -97,6 +154,10 @@ def _copy_demo_files(repository_root: Path, force: bool) -> list[Path]:
         (
             demo_data_directory / "feedback.json",
             state_directory / "feedback.json",
+        ),
+        (
+            demo_data_directory / "profile.json",
+            state_directory / "profile.json",
         ),
         (
             demo_data_directory / "weekly_report.md",

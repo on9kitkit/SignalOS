@@ -1,0 +1,27 @@
+{
+  "role": "Demo student-builder and AI product engineer",
+  "goals": [
+    "Turn emerging AI capabilities into useful products",
+    "Build better collaborative learning software",
+    "Develop practical and verifiable agent workflows"
+  ],
+  "active_projects": [
+    "SignalOS OpenAI Build Week demo",
+    "Collaborative revision platform",
+    "Typed agent workflow experiments",
+    "Local AI prototypes on Apple Silicon"
+  ],
+  "preferred_topics": [
+    "on-device AI",
+    "collaborative education technology",
+    "developer tools",
+    "verifiable AI agents",
+    "inference economics"
+  ],
+  "excluded_topics": [
+    "celebrity news",
+    "generic gadget announcements"
+  ],
+  "briefing_style": "opportunity-focused",
+  "current_focus": "Prioritise on-device AI, collaborative education, verifiable agent tooling, and workflow opportunities created by falling inference costs."
+}

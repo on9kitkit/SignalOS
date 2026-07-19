@@ -18,6 +18,7 @@ RSS feeds
 → freshness filtering
 → deduplication
 → source-balanced candidate selection
+→ User profile + current focus
 → GPT strategic ranking
 → four actionable signals
 → Discord delivery
@@ -39,10 +40,17 @@ RSS feeds
 - Delivers signals through Discord
 - Displays intelligence in a FastAPI dashboard
 - Stores article feedback
+- Customises ranking with a local intelligence profile and temporary focus
 - Generates weekly intelligence reports
 - Uses atomic JSON writes, locking, backups, and corruption detection
 - Runs daily and weekly workflows with GitHub Actions
 - Includes a deterministic no-secrets Demo Mode for reviewers
+
+### Custom Intelligence Profile
+
+The dashboard profile editor lets one local user customise their role, goals, active projects, preferred and excluded topics, briefing style, and current focus. The validated profile is stored in `.signalos_state/profile.json` and is added to future ranking prompts as context; it does not change article fetching or trusted article metadata.
+
+The current focus is a temporary steering field for redirecting the next briefing toward a specific product, technical, or learning priority. It remains in effect until it is edited or cleared. The feature is intentionally local-first and single-user, with no accounts, database, or secret values in the profile.
 
 ## Tech stack
 
@@ -124,7 +132,7 @@ The digest is sent to Discord using a webhook. Long digests are split into multi
 
 ## Demo Mode
 
-Demo Mode gives reviewers and OpenAI Build Week judges a deterministic SignalOS dashboard without requiring API keys, Discord credentials, RSS fetching, or paid model calls. It uses clearly synthetic sample articles, feedback, and a weekly report; it does not run the daily pipeline.
+Demo Mode gives reviewers and OpenAI Build Week judges a deterministic SignalOS dashboard without requiring API keys, Discord credentials, RSS fetching, or paid model calls. It uses clearly synthetic sample articles, feedback, a matching intelligence profile, and a weekly report; it does not run the daily pipeline.
 
 ```bash
 python3 -m venv .venv
@@ -134,7 +142,7 @@ python3 scripts/load_demo_data.py
 uvicorn src.web_app:app --reload
 ```
 
-Then open `http://127.0.0.1:8000` in a browser. The dashboard will show four demo signals, two existing ratings, two unrated signals for testing the feedback controls, and a weekly intelligence report.
+Then open `http://127.0.0.1:8000` in a browser. The dashboard will show four demo signals, two existing ratings, two unrated signals for testing the feedback controls, a synthetic custom profile, and a weekly intelligence report.
 
 The loader refuses to overwrite existing runtime files. To intentionally replace them with the synthetic fixtures, run:
 
@@ -240,6 +248,7 @@ During Build Week, it was meaningfully extended with:
 - a FastAPI intelligence dashboard
 - weekly intelligence reports
 - persistent article feedback
+- a local custom intelligence profile and temporary briefing focus
 - progressive-enhancement JavaScript interactions
 - source-balanced candidate preselection
 - ranking token and cost controls

@@ -7,12 +7,33 @@ from urllib.parse import parse_qs
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from src.state_store import locked_update_json_list, read_json_list
+from src.profile import (
+    MAX_ACTIVE_PROJECTS,
+    MAX_CURRENT_FOCUS_CHARS,
+    MAX_EXCLUDED_TOPICS,
+    MAX_GOALS,
+    MAX_LIST_ITEM_CHARS,
+    MAX_PREFERRED_TOPICS,
+    MAX_PROFILE_PAYLOAD_BYTES,
+    MAX_ROLE_CHARS,
+    SUPPORTED_BRIEFING_STYLES,
+    IntelligenceProfile,
+    ProfileValidationError,
+    load_profile,
+    profile_from_form_fields,
+    save_profile,
+)
+from src.state_store import (
+    StateStoreError,
+    locked_update_json_list,
+    read_json_list,
+)
 
 
 STATE_DIR = Path(".signalos_state")
 ARTICLE_HISTORY_PATH = STATE_DIR / "article_history.json"
 FEEDBACK_PATH = STATE_DIR / "feedback.json"
+PROFILE_PATH = STATE_DIR / "profile.json"
 WEEKLY_REPORT_DIRS = (
     Path("weekly_reports"),
     Path("src/weekly_reports"),
@@ -245,6 +266,112 @@ def _redirect_rated_home() -> RedirectResponse:
     return RedirectResponse("/?rated=1", status_code=303)
 
 
+def _redirect_profile_home(*, saved: bool) -> RedirectResponse:
+    query = "profile_saved=1" if saved else "profile_error=1"
+    return RedirectResponse(f"/?{query}", status_code=303)
+
+
+def _profile_list_text(items: list[str]) -> str:
+    return escape("\n".join(items))
+
+
+def _profile_panel_html(profile: IntelligenceProfile) -> str:
+    role = escape(profile.role)
+    current_focus = escape(profile.current_focus)
+    current_focus_summary = current_focus or "No temporary focus set"
+    briefing_style_label = escape(
+        profile.briefing_style.replace("-", " ").title()
+    )
+    style_options = "".join(
+        f'<option value="{escape(style)}"'
+        f'{" selected" if style == profile.briefing_style else ""}>'
+        f'{escape(style.replace("-", " ").title())}</option>'
+        for style in SUPPORTED_BRIEFING_STYLES
+    )
+    goals_maxlength = MAX_GOALS * (MAX_LIST_ITEM_CHARS + 1)
+    projects_maxlength = MAX_ACTIVE_PROJECTS * (MAX_LIST_ITEM_CHARS + 1)
+    preferred_topics_maxlength = MAX_PREFERRED_TOPICS * (
+        MAX_LIST_ITEM_CHARS + 1
+    )
+    excluded_topics_maxlength = MAX_EXCLUDED_TOPICS * (
+        MAX_LIST_ITEM_CHARS + 1
+    )
+
+    return f"""
+    <details class="profile-panel" data-profile-panel>
+        <summary class="profile-summary">
+            <span class="profile-heading">
+                <span class="eyebrow">Intelligence Profile</span>
+                <span class="profile-title">Your ranking context</span>
+                <span class="profile-subtitle">Controls what future SignalOS briefings consider relevant.</span>
+            </span>
+            <span class="profile-snapshot" aria-label="Current intelligence profile">
+                <span class="profile-snapshot-item profile-snapshot-role">
+                    <span class="profile-summary-label">Role</span>
+                    <strong data-profile-role>{role}</strong>
+                </span>
+                <span class="profile-snapshot-item">
+                    <span class="profile-summary-label">Style</span>
+                    <strong data-profile-style>{briefing_style_label}</strong>
+                </span>
+                <span class="profile-snapshot-item profile-snapshot-focus">
+                    <span class="profile-summary-label">Current focus</span>
+                    <strong data-profile-focus>{current_focus_summary}</strong>
+                </span>
+                <span class="profile-counts">
+                    <span><strong data-profile-topic-count>{len(profile.preferred_topics)}</strong> topics</span>
+                    <span><strong data-profile-project-count>{len(profile.active_projects)}</strong> projects</span>
+                </span>
+            </span>
+            <span class="profile-edit-label">Edit profile <span aria-hidden="true">+</span></span>
+        </summary>
+        <div class="profile-editor">
+            <form class="profile-form" method="post" action="/profile" data-profile-form>
+                <div class="profile-form-grid">
+                    <label class="profile-field">
+                        <span>Role</span>
+                        <input type="text" name="role" value="{role}" maxlength="{MAX_ROLE_CHARS}" required>
+                    </label>
+                    <label class="profile-field">
+                        <span>Briefing style</span>
+                        <select name="briefing_style">
+                            {style_options}
+                        </select>
+                    </label>
+                    <label class="profile-field">
+                        <span>Goals <small>one per line</small></span>
+                        <textarea name="goals" rows="4" maxlength="{goals_maxlength}">{_profile_list_text(profile.goals)}</textarea>
+                    </label>
+                    <label class="profile-field">
+                        <span>Active projects <small>one per line</small></span>
+                        <textarea name="active_projects" rows="4" maxlength="{projects_maxlength}">{_profile_list_text(profile.active_projects)}</textarea>
+                    </label>
+                    <label class="profile-field">
+                        <span>Preferred topics <small>one per line</small></span>
+                        <textarea name="preferred_topics" rows="4" maxlength="{preferred_topics_maxlength}">{_profile_list_text(profile.preferred_topics)}</textarea>
+                    </label>
+                    <label class="profile-field">
+                        <span>Excluded topics <small>one per line</small></span>
+                        <textarea name="excluded_topics" rows="4" maxlength="{excluded_topics_maxlength}">{_profile_list_text(profile.excluded_topics)}</textarea>
+                    </label>
+                    <label class="profile-field profile-field-wide">
+                        <span>Current focus</span>
+                        <textarea name="current_focus" rows="3" maxlength="{MAX_CURRENT_FOCUS_CHARS}">{current_focus}</textarea>
+                    </label>
+                </div>
+                <div class="profile-form-actions">
+                    <p class="profile-form-status" data-profile-form-status role="status" hidden></p>
+                    <div class="profile-buttons">
+                        <button class="profile-button profile-button-secondary" type="reset" data-profile-cancel>Cancel</button>
+                        <button class="profile-button profile-button-primary" type="submit" data-profile-submit>Save profile</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </details>
+    """
+
+
 @app.post("/feedback")
 async def submit_feedback(request: Request) -> RedirectResponse:
     body = await request.body()
@@ -277,11 +404,48 @@ async def submit_feedback(request: Request) -> RedirectResponse:
     return _redirect_rated_home()
 
 
+@app.post("/profile")
+async def submit_profile(request: Request) -> RedirectResponse:
+    body = await request.body()
+    if len(body) > MAX_PROFILE_PAYLOAD_BYTES:
+        return _redirect_profile_home(saved=False)
+
+    try:
+        form_data = parse_qs(
+            body.decode("utf-8", errors="replace"),
+            keep_blank_values=True,
+            max_num_fields=16,
+        )
+        profile = profile_from_form_fields({
+            field_name: _first_form_value(form_data, field_name)
+            for field_name in (
+                "role",
+                "goals",
+                "active_projects",
+                "preferred_topics",
+                "excluded_topics",
+                "briefing_style",
+                "current_focus",
+            )
+        })
+        save_profile(profile, PROFILE_PATH)
+    except (ProfileValidationError, StateStoreError, ValueError):
+        return _redirect_profile_home(saved=False)
+
+    return _redirect_profile_home(saved=True)
+
+
 @app.get("/", response_class=HTMLResponse)
-def dashboard_home(rated: str | None = None) -> str:
+def dashboard_home(
+    rated: str | None = None,
+    profile_saved: str | None = None,
+    profile_error: str | None = None,
+) -> str:
     article_history = _load_article_history()
     latest_articles = _latest_digest_articles(article_history)
     feedback_by_article = _feedback_by_fingerprint(_load_feedback_entries())
+    intelligence_profile = load_profile(PROFILE_PATH)
+    profile_panel_html = _profile_panel_html(intelligence_profile)
     latest_digest_date = _html_text(
         latest_articles[0].get("digest_date") if latest_articles else None,
         "No digest yet",
@@ -352,6 +516,20 @@ def dashboard_home(rated: str | None = None) -> str:
         <section class="success-banner" role="status">
             <span class="success-dot" aria-hidden="true"></span>
             <p>Feedback saved for future ranking improvements.</p>
+        </section>
+        """
+    if profile_saved == "1":
+        success_banner_html += """
+        <section class="success-banner" role="status">
+            <span class="success-dot" aria-hidden="true"></span>
+            <p>Intelligence profile saved. Future rankings will use this context.</p>
+        </section>
+        """
+    if profile_error == "1":
+        success_banner_html += """
+        <section class="error-banner" role="alert">
+            <span class="error-dot" aria-hidden="true"></span>
+            <p>Profile not saved. Check the field lengths and briefing style.</p>
         </section>
         """
 
@@ -635,6 +813,316 @@ def dashboard_home(rated: str | None = None) -> str:
                     border-radius: 999px;
                     background: var(--signal);
                     box-shadow: 0 0 0 6px rgba(167, 243, 208, 0.12);
+                }}
+
+                .error-banner {{
+                    display: flex;
+                    align-items: center;
+                    gap: 12px;
+                    margin: 0 0 18px;
+                    padding: 14px 16px;
+                    border: 1px solid rgba(251, 113, 133, 0.38);
+                    border-radius: 8px;
+                    background: rgba(159, 18, 57, 0.18);
+                }}
+
+                .error-dot {{
+                    width: 10px;
+                    height: 10px;
+                    flex: 0 0 auto;
+                    border-radius: 999px;
+                    background: #fda4af;
+                    box-shadow: 0 0 0 6px rgba(251, 113, 133, 0.1);
+                }}
+
+                .profile-panel {{
+                    margin: 0 0 18px;
+                    overflow: hidden;
+                    border: 1px solid rgba(167, 243, 208, 0.2);
+                    border-radius: 8px;
+                    background:
+                        linear-gradient(135deg, rgba(16, 185, 129, 0.06), transparent 32%),
+                        rgba(10, 17, 30, 0.76);
+                    box-shadow: 0 14px 42px rgba(0, 0, 0, 0.16);
+                    backdrop-filter: blur(16px);
+                }}
+
+                .profile-summary {{
+                    display: grid;
+                    grid-template-columns: minmax(210px, 0.72fr) minmax(0, 1.55fr) auto;
+                    align-items: center;
+                    gap: 18px;
+                    padding: 17px 19px;
+                    list-style: none;
+                    cursor: pointer;
+                    transition: background 160ms ease, box-shadow 160ms ease;
+                }}
+
+                .profile-summary::-webkit-details-marker {{
+                    display: none;
+                }}
+
+                .profile-summary:hover {{
+                    background: rgba(167, 243, 208, 0.035);
+                }}
+
+                .profile-summary:focus-visible {{
+                    outline: 2px solid #a7f3d0;
+                    outline-offset: -3px;
+                }}
+
+                .profile-panel[open] .profile-summary {{
+                    border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+                    background: rgba(7, 10, 18, 0.2);
+                }}
+
+                .profile-heading {{
+                    display: grid;
+                    gap: 5px;
+                    min-width: 0;
+                }}
+
+                .profile-heading .eyebrow {{
+                    margin: 0;
+                }}
+
+                .profile-title {{
+                    color: #f8fbff;
+                    font-size: 1.18rem;
+                    font-weight: 850;
+                    line-height: 1.2;
+                }}
+
+                .profile-subtitle {{
+                    color: var(--muted);
+                    font-size: 0.78rem;
+                    line-height: 1.45;
+                }}
+
+                .profile-snapshot {{
+                    display: grid;
+                    grid-template-columns: minmax(0, 1.1fr) minmax(110px, 0.6fr) auto;
+                    gap: 10px 16px;
+                    min-width: 0;
+                }}
+
+                .profile-snapshot-item {{
+                    display: grid;
+                    gap: 3px;
+                    min-width: 0;
+                }}
+
+                .profile-snapshot-focus {{
+                    grid-column: 1 / 3;
+                }}
+
+                .profile-summary-label {{
+                    color: var(--muted);
+                    font-size: 0.65rem;
+                    font-weight: 900;
+                    letter-spacing: 0.1em;
+                    text-transform: uppercase;
+                }}
+
+                .profile-snapshot strong {{
+                    overflow: hidden;
+                    color: #e8eefb;
+                    font-size: 0.84rem;
+                    line-height: 1.35;
+                    text-overflow: ellipsis;
+                    white-space: nowrap;
+                }}
+
+                .profile-counts {{
+                    display: flex;
+                    grid-column: 3;
+                    grid-row: 1 / 3;
+                    align-items: center;
+                    justify-content: flex-end;
+                    gap: 7px;
+                    align-self: end;
+                }}
+
+                .profile-counts span {{
+                    padding: 5px 7px;
+                    border: 1px solid rgba(125, 211, 252, 0.16);
+                    border-radius: 6px;
+                    background: rgba(14, 165, 233, 0.06);
+                    color: var(--muted);
+                    font-size: 0.68rem;
+                    white-space: nowrap;
+                }}
+
+                .profile-counts strong {{
+                    color: var(--accent);
+                    font-size: inherit;
+                }}
+
+                .profile-edit-label {{
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 8px;
+                    min-height: 38px;
+                    padding: 8px 11px;
+                    border: 1px solid rgba(167, 243, 208, 0.28);
+                    border-radius: 8px;
+                    background: rgba(16, 185, 129, 0.08);
+                    color: #d1fae5;
+                    font-size: 0.78rem;
+                    font-weight: 850;
+                    white-space: nowrap;
+                }}
+
+                .profile-edit-label span {{
+                    font-size: 1rem;
+                    line-height: 1;
+                    transition: transform 160ms ease;
+                }}
+
+                .profile-panel[open] .profile-edit-label span {{
+                    transform: rotate(45deg);
+                }}
+
+                .profile-editor {{
+                    padding: 19px;
+                }}
+
+                .profile-form {{
+                    display: grid;
+                    gap: 16px;
+                }}
+
+                .profile-form-grid {{
+                    display: grid;
+                    grid-template-columns: repeat(2, minmax(0, 1fr));
+                    gap: 14px;
+                }}
+
+                .profile-field {{
+                    display: grid;
+                    gap: 7px;
+                    min-width: 0;
+                    color: #dbeafe;
+                    font-size: 0.76rem;
+                    font-weight: 850;
+                    letter-spacing: 0.04em;
+                    text-transform: uppercase;
+                }}
+
+                .profile-field small {{
+                    color: var(--muted);
+                    font-size: 0.66rem;
+                    font-weight: 700;
+                    letter-spacing: 0;
+                    text-transform: none;
+                }}
+
+                .profile-field-wide {{
+                    grid-column: 1 / -1;
+                }}
+
+                .profile-field input,
+                .profile-field textarea,
+                .profile-field select {{
+                    width: 100%;
+                    border: 1px solid rgba(148, 163, 184, 0.24);
+                    border-radius: 7px;
+                    background: rgba(4, 8, 15, 0.72);
+                    color: var(--text);
+                    font: inherit;
+                    font-size: 0.88rem;
+                    font-weight: 500;
+                    letter-spacing: 0;
+                    line-height: 1.45;
+                    text-transform: none;
+                    transition: border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
+                }}
+
+                .profile-field input,
+                .profile-field select {{
+                    min-height: 42px;
+                    padding: 9px 11px;
+                }}
+
+                .profile-field textarea {{
+                    min-height: 104px;
+                    padding: 10px 11px;
+                    resize: vertical;
+                }}
+
+                .profile-field input:hover,
+                .profile-field textarea:hover,
+                .profile-field select:hover {{
+                    border-color: rgba(125, 211, 252, 0.4);
+                }}
+
+                .profile-field input:focus-visible,
+                .profile-field textarea:focus-visible,
+                .profile-field select:focus-visible {{
+                    outline: 2px solid #7dd3fc;
+                    outline-offset: 2px;
+                    border-color: rgba(125, 211, 252, 0.62);
+                    background: rgba(7, 12, 22, 0.94);
+                }}
+
+                .profile-form-actions {{
+                    display: flex;
+                    align-items: center;
+                    justify-content: space-between;
+                    gap: 14px;
+                    padding-top: 14px;
+                    border-top: 1px solid rgba(148, 163, 184, 0.12);
+                }}
+
+                .profile-form-status {{
+                    color: var(--signal);
+                    font-size: 0.84rem;
+                    font-weight: 750;
+                }}
+
+                .profile-buttons {{
+                    display: flex;
+                    gap: 9px;
+                    margin-left: auto;
+                }}
+
+                .profile-button {{
+                    min-height: 40px;
+                    padding: 9px 13px;
+                    border: 1px solid rgba(148, 163, 184, 0.28);
+                    border-radius: 8px;
+                    background: rgba(15, 23, 42, 0.72);
+                    color: var(--text);
+                    font: inherit;
+                    font-size: 0.82rem;
+                    font-weight: 850;
+                    cursor: pointer;
+                    transition: transform 160ms ease, border-color 160ms ease, background 160ms ease;
+                }}
+
+                .profile-button-primary {{
+                    border-color: rgba(167, 243, 208, 0.48);
+                    background: linear-gradient(135deg, rgba(16, 185, 129, 0.25), rgba(14, 165, 233, 0.16));
+                }}
+
+                .profile-button:hover {{
+                    transform: translateY(-1px);
+                    border-color: rgba(125, 211, 252, 0.58);
+                }}
+
+                .profile-button:active {{
+                    transform: translateY(0);
+                }}
+
+                .profile-button:focus-visible {{
+                    outline: 2px solid #a7f3d0;
+                    outline-offset: 3px;
+                }}
+
+                .profile-button:disabled {{
+                    cursor: wait;
+                    opacity: 0.62;
+                    transform: none;
                 }}
 
                 .weekly-panel {{
@@ -1248,6 +1736,20 @@ def dashboard_home(rated: str | None = None) -> str:
                     .hero-stats {{
                         grid-template-columns: repeat(3, minmax(0, 1fr));
                     }}
+
+                    .profile-summary {{
+                        grid-template-columns: minmax(0, 1fr) auto;
+                    }}
+
+                    .profile-snapshot {{
+                        grid-column: 1 / -1;
+                        grid-row: 2;
+                    }}
+
+                    .profile-edit-label {{
+                        grid-column: 2;
+                        grid-row: 1;
+                    }}
                 }}
 
                 @media (max-width: 840px) {{
@@ -1292,6 +1794,56 @@ def dashboard_home(rated: str | None = None) -> str:
                     .weekly-panel-header {{
                         align-items: stretch;
                         flex-direction: column;
+                    }}
+
+                    .profile-summary {{
+                        grid-template-columns: 1fr;
+                        gap: 14px;
+                    }}
+
+                    .profile-snapshot {{
+                        grid-column: 1;
+                        grid-row: auto;
+                        grid-template-columns: 1fr;
+                    }}
+
+                    .profile-snapshot-focus,
+                    .profile-counts {{
+                        grid-column: 1;
+                        grid-row: auto;
+                    }}
+
+                    .profile-counts {{
+                        justify-content: flex-start;
+                    }}
+
+                    .profile-edit-label {{
+                        grid-column: 1;
+                        grid-row: auto;
+                        justify-content: center;
+                        width: 100%;
+                    }}
+
+                    .profile-form-grid {{
+                        grid-template-columns: 1fr;
+                    }}
+
+                    .profile-field-wide {{
+                        grid-column: 1;
+                    }}
+
+                    .profile-form-actions {{
+                        align-items: stretch;
+                        flex-direction: column;
+                    }}
+
+                    .profile-buttons {{
+                        width: 100%;
+                        margin: 0;
+                    }}
+
+                    .profile-button {{
+                        flex: 1;
                     }}
 
                     .weekly-report-badge {{
@@ -1382,10 +1934,11 @@ def dashboard_home(rated: str | None = None) -> str:
                     </aside>
                 </header>
                 {success_banner_html}
-                <section class="success-banner feedback-toast" data-feedback-toast role="status" hidden>
+                <section class="success-banner feedback-toast" data-dashboard-toast role="status" hidden>
                     <span class="success-dot" aria-hidden="true"></span>
-                    <p>Feedback saved for future ranking improvements.</p>
+                    <p data-toast-message>Update saved.</p>
                 </section>
+                {profile_panel_html}
                 {weekly_report_html}
                 <section class="section-heading" aria-label="Daily Signals">
                     <div>
@@ -1412,7 +1965,13 @@ def dashboard_home(rated: str | None = None) -> str:
                     document.documentElement.classList.add("js");
 
                     const feedbackForms = document.querySelectorAll("[data-feedback-form]");
-                    const feedbackToast = document.querySelector("[data-feedback-toast]");
+                    const dashboardToast = document.querySelector("[data-dashboard-toast]");
+                    const toastMessage = dashboardToast?.querySelector("[data-toast-message]");
+                    const profilePanel = document.querySelector("[data-profile-panel]");
+                    const profileForm = document.querySelector("[data-profile-form]");
+                    const profileCancel = document.querySelector("[data-profile-cancel]");
+                    const profileSubmit = document.querySelector("[data-profile-submit]");
+                    const profileFormStatus = document.querySelector("[data-profile-form-status]");
                     const weeklyPanel = document.querySelector("[data-weekly-panel]");
                     const weeklyPreview = document.querySelector("[data-weekly-preview]");
                     const weeklyToggle = document.querySelector("[data-weekly-toggle]");
@@ -1444,17 +2003,106 @@ def dashboard_home(rated: str | None = None) -> str:
                         }}
                     }}
 
-                    const showFeedbackToast = () => {{
-                        if (!feedbackToast) {{
+                    const showToast = (message) => {{
+                        if (!dashboardToast || !toastMessage) {{
                             return;
                         }}
 
-                        feedbackToast.hidden = false;
+                        toastMessage.textContent = message;
+                        dashboardToast.hidden = false;
                         window.clearTimeout(toastTimer);
                         toastTimer = window.setTimeout(() => {{
-                            feedbackToast.hidden = true;
+                            dashboardToast.hidden = true;
                         }}, 4000);
                     }};
+
+                    const uniqueLines = (value) => {{
+                        const items = [];
+                        const seen = new Set();
+
+                        value.split(/\\r?\\n/).forEach((line) => {{
+                            const cleaned = line.trim().replace(/\\s+/g, " ");
+                            const key = cleaned.toLocaleLowerCase();
+                            if (cleaned && !seen.has(key)) {{
+                                seen.add(key);
+                                items.push(cleaned);
+                            }}
+                        }});
+
+                        return items;
+                    }};
+
+                    const displayBriefingStyle = (value) => value
+                        .split("-")
+                        .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+                        .join(" ");
+
+                    const updateProfileSummary = (formData) => {{
+                        const role = String(formData.get("role") || "").trim();
+                        const style = String(formData.get("briefing_style") || "");
+                        const focus = String(formData.get("current_focus") || "").trim();
+                        const topics = uniqueLines(String(formData.get("preferred_topics") || ""));
+                        const projects = uniqueLines(String(formData.get("active_projects") || ""));
+
+                        document.querySelector("[data-profile-role]").textContent = role;
+                        document.querySelector("[data-profile-style]").textContent = displayBriefingStyle(style);
+                        document.querySelector("[data-profile-focus]").textContent = focus || "No temporary focus set";
+                        document.querySelector("[data-profile-topic-count]").textContent = String(topics.length);
+                        document.querySelector("[data-profile-project-count]").textContent = String(projects.length);
+                    }};
+
+                    const submitProfile = async (event) => {{
+                        event.preventDefault();
+
+                        if (!profileForm || !profileSubmit) {{
+                            return;
+                        }}
+
+                        const formData = new FormData(profileForm);
+                        profileSubmit.disabled = true;
+                        if (profileFormStatus) {{
+                            profileFormStatus.hidden = true;
+                        }}
+
+                        try {{
+                            const response = await fetch(profileForm.action, {{
+                                method: profileForm.method.toUpperCase(),
+                                headers: {{
+                                    "Content-Type": "application/x-www-form-urlencoded",
+                                }},
+                                body: new URLSearchParams(formData),
+                            }});
+                            const responseUrl = new URL(response.url);
+
+                            if (!response.ok || responseUrl.searchParams.get("profile_saved") !== "1") {{
+                                throw new Error("Profile request failed");
+                            }}
+
+                            updateProfileSummary(formData);
+                            if (profileFormStatus) {{
+                                profileFormStatus.textContent = "Profile saved. Future rankings will use this context.";
+                                profileFormStatus.hidden = false;
+                            }}
+                            showToast("Intelligence profile saved.");
+                            profileSubmit.disabled = false;
+                        }} catch {{
+                            profileSubmit.disabled = false;
+                            profileForm.submit();
+                        }}
+                    }};
+
+                    if (profileForm) {{
+                        profileForm.addEventListener("submit", submitProfile);
+                    }}
+
+                    if (profileCancel && profilePanel) {{
+                        profileCancel.addEventListener("click", () => {{
+                            if (profileFormStatus) {{
+                                profileFormStatus.hidden = true;
+                            }}
+                            profilePanel.open = false;
+                        }});
+                    }}
 
                     const createSavedFeedback = (rating) => {{
                         const savedFeedback = document.createElement("div");
@@ -1532,7 +2180,7 @@ def dashboard_home(rated: str | None = None) -> str:
 
                             feedbackRegion.replaceWith(createSavedFeedback(rating));
                             updateFeedbackSummary();
-                            showFeedbackToast();
+                            showToast("Feedback saved for future ranking improvements.");
                         }} catch {{
                             form.submit();
                         }}
