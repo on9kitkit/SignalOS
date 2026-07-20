@@ -1,282 +1,228 @@
-
-
 # SignalOS
 
-SignalOS is a personal intelligence system that collects high-signal AI, technology, business, and education news, filters and ranks it using GPT, and turns it into four actionable daily signals.
+SignalOS is a personal intelligence system that converts high-volume AI, technology, business, and education news into four personalised, actionable signals.
 
-The signals are delivered through Discord and displayed in a FastAPI dashboard with feedback controls, persistent article history, and weekly intelligence reports.
+**Four signals. Zero noise.**
 
-The goal is not to create another generic news summariser. SignalOS is designed for student-builders, programmers, and early-stage founders who need to know which developments actually matter for their projects, skills, and opportunities.
+[Watch the public demo](https://youtu.be/AhzTTNRnJaY) · [Run Demo Mode](#deterministic-demo-mode) · [Quick start](#quick-start) · [Architecture](#how-signalos-works)
 
-## What it does
+## Why SignalOS exists
 
-SignalOS runs automatically in the cloud and performs the full pipeline:
+News feeds create information overload, while generic summaries rarely account for what someone is trying to learn, build, or decide. SignalOS ranks information against the user's goals, active projects, preferred topics, and current focus, then turns the strongest items into concrete next actions.
+
+## Core capabilities
+
+| Area | What is implemented |
+| --- | --- |
+| Ingestion | Curated RSS feeds spanning AI labs, developer tooling, technology, business, and education |
+| Local selection | Freshness and seen-article filtering, URL/title deduplication, and deterministic source-balanced preselection |
+| Cost control | No more than 32 candidates reach the ranking model; article summaries and model output are also capped |
+| GPT-5.6 ranking | Profile-aware scoring for relevance, quality, importance, and actionability through the OpenAI Responses API |
+| Reliability | Trusted article-index mapping attaches model analysis to the original Python `Article` objects |
+| Daily output | Four source-diverse signals with a reason and an action takeaway |
+| Personalisation | An editable Custom Intelligence Profile plus a temporary current-focus control |
+| Experience | FastAPI dashboard, local feedback persistence, Weekly Intelligence, and small vanilla JavaScript interactions |
+| Delivery and automation | Discord delivery plus scheduled daily and weekly GitHub Actions workflows |
+| Reviewer path | Deterministic synthetic Demo Mode with no OpenAI, Discord, or RSS credentials required |
+| Quality | Automated tests for ranking safeguards, state storage, profiles, demo loading, feedback, and dashboard behaviour |
+
+Feedback is stored for future ranking improvements. It is not currently used to retrain the model or automatically change subsequent rankings.
+
+## Public demo
+
+[Watch the SignalOS Build Week demo on YouTube](https://youtu.be/AhzTTNRnJaY).
+
+For hands-on evaluation, [Deterministic Demo Mode](#deterministic-demo-mode) loads a complete local dashboard experience without paid calls or credentials.
+
+## How SignalOS works
 
 ```text
 RSS feeds
-→ article normalisation
-→ freshness filtering
-→ deduplication
-→ source-balanced candidate selection
-→ User profile + current focus
-→ GPT strategic ranking
-→ four actionable signals
-→ Discord delivery
-→ FastAPI dashboard
-→ feedback and weekly intelligence
+→ freshness and seen-article filtering
+→ URL/title deduplication
+→ source-balanced candidate selection (maximum 32)
+→ Intelligence Profile and current focus
+→ GPT-5.6 strategic ranking
+→ trusted index mapping
+→ four source-diverse actionable signals
+→ dashboard, Discord, local feedback state, and Weekly Intelligence
 ```
 
-## Current features
+The model receives a compact, indexed candidate list and returns analysis tied to candidate indexes. Python validates each index and maps it back to the original trusted object, so model output cannot replace the source title, publisher, or URL.
 
-- Fetches articles from selected AI, technology, business, and education RSS feeds
-- Filters stale articles and previously seen stories
-- Deduplicates articles using stable fingerprints and normalised metadata
-- Applies source-balanced candidate preselection
-- Caps ranking input to control API cost
-- Uses GPT to rank articles by relevance, quality, importance, and actionability
-- Maps model-returned indexes back to original trusted article objects
-- Produces four daily strategic signals
-- Generates reasons and concrete action takeaways
-- Delivers signals through Discord
-- Displays intelligence in a FastAPI dashboard
-- Stores article feedback
-- Customises ranking with a local intelligence profile and temporary focus
-- Generates weekly intelligence reports
-- Uses atomic JSON writes, locking, backups, and corruption detection
-- Runs daily and weekly workflows with GitHub Actions
-- Includes a deterministic no-secrets Demo Mode for reviewers
+The daily pipeline saves selected signals to local history. The weekly pipeline analyses the most recent seven days of that history and produces a separate Markdown intelligence report.
 
-### Custom Intelligence Profile
+## Intelligence Profile
 
-The dashboard profile editor lets one local user customise their role, goals, active projects, preferred and excluded topics, briefing style, and current focus. The validated profile is stored in `.signalos_state/profile.json` and is added to future ranking prompts as context; it does not change article fetching or trusted article metadata.
+The dashboard editor supports:
 
-The current focus is a temporary steering field for redirecting the next briefing toward a specific product, technical, or learning priority. It remains in effect until it is edited or cleared. The feature is intentionally local-first and single-user, with no accounts, database, or secret values in the profile.
+- role
+- goals
+- active projects
+- preferred topics
+- excluded topics
+- briefing style (`concise`, `strategic`, `technical`, or `opportunity-focused`)
+- current focus
 
-## Tech stack
+The validated profile is stored locally in `.signalos_state/profile.json` and supplied as context during ranking. Current focus is a steering field for the next briefings and remains active until edited or cleared; it does not alter article fetching or trusted article metadata.
 
-- Python 3.11+
-- FastAPI
-- Uvicorn
-- OpenAI API
-- GPT-5.6
-- RSS feeds via `feedparser`
-- Discord webhooks
-- Vanilla JavaScript
-- HTML and CSS
-- GitHub Actions
-- JSON state storage
-- File locking and atomic writes
-- Markdown reporting
+## Deterministic Demo Mode
 
-## Project structure
-
-```text
-SignalOS/
-├── .github/
-│   └── workflows/
-│       ├── morning.yml
-│       └── weekly.yml
-├── demo_data/
-│   ├── article_history.json
-│   ├── feedback.json
-│   └── weekly_report.md
-├── scripts/
-│   └── load_demo_data.py
-├── src/
-│   ├── config.py
-│   ├── delivery.py
-│   ├── digest.py
-│   ├── main.py
-│   ├── models.py
-│   ├── news_fetcher.py
-│   ├── ranker.py
-│   ├── state_store.py
-│   ├── web_app.py
-│   └── weekly_summary.py
-├── .env.example
-├── .gitignore
-├── README.md
-└── requirements.txt
-```
-
-## How it works
-
-### 1. Article collection
-
-SignalOS fetches recent articles from a curated set of RSS feeds focused on AI and technology.
-
-### 2. Freshness filtering
-
-Articles are filtered so the digest prefers genuinely recent stories instead of old RSS items that remain near the top of a feed.
-
-### 3. Repeat prevention
-
-Each selected article is converted into a stable fingerprint based on its title and URL. SignalOS stores those fingerprints in a lightweight state file so the same story is not repeatedly sent across different days.
-
-### 4. AI ranking
-
-Candidate articles are passed to an OpenAI model, which ranks them using:
-
-- Relevance to the user profile
-- Article quality
-- Strategic importance
-- Practical actionability
-
-### 5. Digest generation
-
-The selected articles are formatted into a Markdown digest with reasoning and action takeaways.
-
-### 6. Discord delivery
-
-The digest is sent to Discord using a webhook. Long digests are split into multiple Discord-safe chunks instead of being silently cut off.
-
-## Demo Mode
-
-Demo Mode gives reviewers and OpenAI Build Week judges a deterministic SignalOS dashboard without requiring API keys, Discord credentials, RSS fetching, or paid model calls. It uses clearly synthetic sample articles, feedback, a matching intelligence profile, and a weekly report; it does not run the daily pipeline.
+This is the fastest path for judges and reviewers. It installs checked-in synthetic fixtures, starts the local dashboard, and does not call OpenAI, Discord, or RSS services.
 
 ```bash
+git clone https://github.com/on9kitkit/SignalOS.git
+cd SignalOS
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+python3 -m pip install -r requirements.txt
 python3 scripts/load_demo_data.py
-uvicorn src.web_app:app --reload
+python3 -m uvicorn src.web_app:app --reload
 ```
 
-Then open `http://127.0.0.1:8000` in a browser. The dashboard will show four demo signals, two existing ratings, two unrated signals for testing the feedback controls, a synthetic custom profile, and a weekly intelligence report.
+Open [http://127.0.0.1:8000](http://127.0.0.1:8000). You should see four synthetic signals, two saved ratings, two unrated signals for testing feedback, a populated Custom Intelligence Profile, and a synthetic Weekly Intelligence report.
 
-The loader refuses to overwrite existing runtime files. To intentionally replace them with the synthetic fixtures, run:
+The loader protects existing runtime data and refuses to overwrite it. To intentionally replace existing local runtime files with the synthetic fixtures, run:
 
 ```bash
 python3 scripts/load_demo_data.py --force
 ```
 
-Demo Mode makes no network or API calls, needs no secrets, and is intended only as a safe reviewer experience.
+## Quick start
 
-## Setup
+### Prerequisites
 
-### 1. Clone the repository
+- Python 3.11 or newer
+- Git
+- OpenAI and Discord credentials for the live daily and weekly pipelines
+
+### Install
 
 ```bash
 git clone https://github.com/on9kitkit/SignalOS.git
 cd SignalOS
-```
-
-### 2. Create a virtual environment
-
-```bash
-python -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate
-```
-
-### 3. Install dependencies
-
-```bash
-pip install -r requirements.txt
-```
-
-### 4. Create a `.env` file
-
-Copy the example file:
-
-```bash
+python3 -m pip install -r requirements.txt
 cp .env.example .env
 ```
 
-Then add your own values:
+Add your own `OPENAI_API_KEY` and `DISCORD_WEBHOOK_URL` values to the local `.env` file. Never commit that file.
 
-```env
-OPENAI_API_KEY=your_openai_api_key_here
-DISCORD_WEBHOOK_URL=your_discord_webhook_url_here
-```
+Model selection is optional and can be overridden with `SIGNALOS_RANKER_MODEL` and `SIGNALOS_WEEKLY_MODEL`; both default to `gpt-5.6-luna`.
 
-Never commit `.env` to GitHub.
-
-### 5. Run locally
+### Run the live daily pipeline
 
 ```bash
-python -m src.main
+python3 -m src.main
 ```
 
-If everything is configured correctly, SignalOS will print the digest locally and send it to Discord.
+This fetches RSS articles, prints and saves the daily digest, sends four article messages to Discord, and updates local history.
 
-## Tests
+### Open the dashboard
+
+```bash
+python3 -m uvicorn src.web_app:app --reload
+```
+
+Open [http://127.0.0.1:8000](http://127.0.0.1:8000). Run the daily pipeline first to populate live article history, or use Demo Mode for a credential-free preview.
+
+### Generate Weekly Intelligence
+
+```bash
+python3 -m src.weekly_summary
+```
+
+This requires recent daily article history and the live service credentials.
+
+## Testing
+
+Run the automated suite from the repository root:
 
 ```bash
 python3 -m pytest
 ```
 
-## GitHub Actions automation
+Run a syntax compilation check with:
 
-SignalOS is designed to run automatically through GitHub Actions.
-
-The workflow:
-
-- Checks out the repository
-- Installs Python dependencies
-- Restores seen-article history from cache
-- Runs the agent
-- Sends the digest to Discord
-- Saves updated seen-article history for future runs
-
-Required GitHub Secrets:
-
-```text
-OPENAI_API_KEY
-DISCORD_WEBHOOK_URL
+```bash
+python3 -m compileall -q src scripts tests
 ```
 
-## Security notes
+The current suite covers the profile model, deterministic demo loader, atomic state storage, ranking safeguards, trusted index mapping, feedback persistence, and dashboard routes.
 
-This repository should not contain secrets. API keys and webhooks are loaded from environment variables or GitHub Secrets.
-
-Ignored local files include:
-
-```text
-.env
-.venv/
-__pycache__/
-digests/
-.signalos_state/
-```
+Current validation: **22 tests passed** on Python 3.11.
 
 ## OpenAI Build Week development
 
-SignalOS existed before OpenAI Build Week as an early command-line and Discord intelligence prototype.
+SignalOS existed before OpenAI Build Week as an early command-line and Discord intelligence prototype. Repository history shows the Build Week work extending that foundation with:
 
-During Build Week, it was meaningfully extended with:
+- the FastAPI dashboard and its editing and feedback interactions
+- Custom Intelligence Profiles and profile-aware ranking
+- Weekly Intelligence generation and presentation
+- trusted candidate-index mapping and ranking reliability improvements
+- source-balanced preselection, prompt limits, configurable models, and workflow cost controls
+- sanitised delivery failures plus atomic and locked JSON state storage
+- deterministic Demo Mode and synthetic reviewer fixtures
+- automated tests, repository-wide auditing, and submission documentation
 
-- a FastAPI intelligence dashboard
-- weekly intelligence reports
-- persistent article feedback
-- a local custom intelligence profile and temporary briefing focus
-- progressive-enhancement JavaScript interactions
-- source-balanced candidate preselection
-- ranking token and cost controls
-- configurable model selection
-- GitHub Actions concurrency safeguards
-- sanitised delivery failures
-- atomic and locked JSON state storage
-- a deterministic reviewer Demo Mode
-- repository-wide security and reliability auditing with Codex
+The entire product is not presented as having been created during Build Week; the submission focuses on the substantial intelligence, interface, reliability, testing, and reviewer-experience work added to the original prototype.
 
-The dated Git history and Codex sessions document these additions.
+## GPT-5.6 and Codex
 
-## Roadmap
+GPT-5.6 is the runtime intelligence layer. It ranks indexed candidates, produces the strategic reason and action takeaway for each selected signal, adapts ranking to the Intelligence Profile, and synthesises the weekly report from saved daily history. The runtime model names remain configurable so cost and capability can be adjusted without changing Python code.
 
-Planned upgrades:
+Codex served as an engineering collaborator for scoped implementation, debugging, repository-wide auditing, testing, UI iteration, reliability work, and documentation support.
 
-- Use explicit feedback signals in future ranking
-- Add editable and undoable feedback
-- Add saved build ideas
-- Add dashboard search and filtering
-- Add trend detection across multiple weeks
-- Add semantic article similarity
-- Add authentication and database-backed multi-user storage
-- Benchmark local inference workflows on Apple Silicon
-- Turn SignalOS into a focused personal-intelligence SaaS
+Human ownership remains central: the creator defined the product vision, designed the architecture and constraints, directed the implementation, reviewed changes, validated behaviour, and made the final product decisions.
 
-## Why this project exists
+## Repository structure
 
-Most news feeds create noise. SignalOS is built to create leverage.
+```text
+SignalOS/
+├── .github/workflows/       # Scheduled daily and weekly pipelines
+├── demo_data/               # Deterministic synthetic reviewer fixtures
+├── scripts/
+│   └── load_demo_data.py    # Safe demo-state loader
+├── src/
+│   ├── config.py            # Lazy model configuration
+│   ├── delivery.py          # Discord delivery and message splitting
+│   ├── digest.py            # Daily Markdown formatting
+│   ├── main.py              # Daily pipeline and candidate preselection
+│   ├── news_fetcher.py      # Curated RSS ingestion
+│   ├── profile.py           # Intelligence Profile validation/storage
+│   ├── ranker.py            # GPT ranking and trusted index mapping
+│   ├── state_store.py       # Atomic JSON storage and file locking
+│   ├── web_app.py           # FastAPI dashboard and feedback routes
+│   └── weekly_summary.py    # Weekly Intelligence pipeline
+├── tests/                   # Automated unit and route tests
+├── .env.example
+├── LICENSE
+├── README.md
+└── requirements.txt
+```
 
-The long-term vision is a personalised intelligence system that helps ambitious builders notice important shifts early, connect them to their own projects, and convert information into action.
+## Security and data handling
+
+- Secrets are loaded from environment variables locally or GitHub Actions secrets; the local `.env` file is excluded from Git.
+- Article history, seen-article state, feedback, and the Intelligence Profile remain in the local `.signalos_state/` directory.
+- Shared state helpers use same-directory temporary files, `fsync`, atomic replacement, backups, corruption detection, and macOS/Linux file locking for read-modify-write updates.
+- Discord delivery errors are sanitised so failures do not include credential-bearing webhook URLs or response bodies.
+- Demo Mode needs no external service secrets and uses clearly synthetic data.
+
+These are practical safeguards for a local, single-user project, not a claim of production security certification.
+
+## Limitations and roadmap
+
+Current limitations are deliberate:
+
+- The dashboard is local-first and single-user, with no authentication or database-backed tenancy.
+- Feedback is persisted but is not yet connected to an automatic learning or ranking-adjustment loop.
+- Coverage and freshness depend on the configured RSS feeds and upstream availability.
+- Live ranking, weekly analysis, and Discord delivery require external service credentials.
+
+The next useful steps are feedback-aware ranking, article-history search and filtering, and authenticated database-backed storage before any public multi-user deployment.
+
+## License
+
+This project is licensed under the [MIT License](LICENSE).
